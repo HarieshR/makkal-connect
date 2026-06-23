@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+/* Custom Utilities for the Premium TVK Look */
+@layer utilities {
+  .glass-card {
+    @apply bg-white/95 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.06)];
+  }
+  
+  .glass-panel-dark {
+    @apply bg-gradient-to-br from-[#8a1c1c] to-[#5a0c0c] border border-[#a32a2a] shadow-lg;
+  }
+
+  .glass-panel-gold {
+    @apply bg-gradient-to-br from-[#facc15] to-[#d97706] border border-[#fde047] shadow-lg;
+  }
+  
+  .glass-panel-slate {
+    @apply bg-gradient-to-br from-[#334155] to-[#1e293b] border border-[#475569] shadow-lg;
+  }
+
+  /* The specific input styling from your image */
+  .premium-input {
+    @apply w-full px-5 py-3.5 rounded-xl border-none bg-gray-50/80 shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)] focus:bg-white focus:ring-2 focus:ring-[#8a1c1c]/30 outline-none transition-all font-medium text-gray-800;
+  }
+}
+
+body {
+  background-color: #f8fafc;
+  /* Very subtle grid background for the "Command Center" feel */
+  background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
+  background-size: 24px 24px;
+}
