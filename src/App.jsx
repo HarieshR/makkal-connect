@@ -48,11 +48,14 @@ const App = () => {
     // 1. Generate Official Member ID
     const generatedMemberId = `TVK-PY-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    // 2. Upload Profile Picture
-    const fileExt = imageFile.name.split('.').pop();
-    const fileName = `${generatedMemberId}-${Math.random()}.${fileExt}`;
+    // 2. Upload Profile Picture (Strictly matching the RLS Policy)
+    // We force the path into 'public/' and force the extension to '.jpg'
+    const fileName = `public/${generatedMemberId}-${Math.floor(Math.random() * 10000)}.jpg`;
     
-    const { error: uploadError } = await supabase.storage.from('profile_pics').upload(fileName, imageFile);
+    const { error: uploadError } = await supabase.storage.from('profile_pics').upload(fileName, imageFile, {
+      contentType: imageFile.type,
+      upsert: false
+    });
     
     if (uploadError) {
       setIsSubmitting(false);
@@ -196,19 +199,20 @@ const App = () => {
               
               <form onSubmit={handleSubmit} className="px-8 md:px-12 py-10">
                 
+                {/* --- PHOTO UPLOAD (Capture attribute removed to allow gallery pick) --- */}
                 <div className="mb-10 flex flex-col items-center sm:items-start group">
                   <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1">
-                    Profile Photo (Take Selfie) <span className="text-[#8a1c1c]">*</span>
+                    Profile Photo (Upload or Selfie) <span className="text-[#8a1c1c]">*</span>
                   </label>
-                  <input type="file" accept="image/*" capture="user" onChange={handleImageChange} className="hidden" id="photo-upload" />
+                  <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" id="photo-upload" />
                   <label htmlFor="photo-upload" className="cursor-pointer flex flex-col sm:flex-row items-center gap-4 bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-6 w-full sm:w-auto hover:border-[#8a1c1c] hover:bg-red-50/30 transition-all shadow-sm">
                     {imagePreview ? (
                       <img src={imagePreview} className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-md" alt="Preview" />
                     ) : (
-                      <div className="w-20 h-20 rounded-full bg-white border border-gray-200 flex items-center justify-center text-3xl shadow-sm text-gray-400">📷</div>
+                      <div className="w-20 h-20 rounded-full bg-white border border-gray-200 flex items-center justify-center text-3xl shadow-sm text-gray-400">📸</div>
                     )}
                     <div className="text-center sm:text-left">
-                      <p className="text-sm font-bold text-[#8a1c1c]">{imagePreview ? 'Tap to Retake Photo' : 'Click to Take Selfie'}</p>
+                      <p className="text-sm font-bold text-[#8a1c1c]">{imagePreview ? 'Tap to Change Photo' : 'Click to Upload or Take Selfie'}</p>
                       <p className="text-xs font-medium text-slate-400 mt-0.5">Required for Digital ID Card</p>
                     </div>
                   </label>
