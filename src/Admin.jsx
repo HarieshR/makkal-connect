@@ -1,8 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
-import * as ReactWindow from 'react-window'; // FIXED IMPORT
-
-const List = ReactWindow.FixedSizeList; // EXTRACTED SAFELY
 
 const CONSTITUENCIES = [
   "Manadipet", "Thirubhuvanai", "Oussudu", "Mangalam", "Villianur", "Ozhukarai", "Kadirgamam", 
@@ -32,10 +29,10 @@ const Admin = () => {
   const handleLogin = (e) => {
     e.preventDefault();
     if (loginForm.password === "admin") {
-      if (loginForm.role === 'Zonal Admin' && !loginForm.zone) return alert('Select zone.');
+      if (loginForm.role === 'Zonal Admin' && !loginForm.zone) return alert('Select your authorized zone.');
       if (loginForm.role === 'Zonal Admin') setSelectedZone(loginForm.zone);
       setIsAuthenticated(true); 
-    } else alert('Access Denied.');
+    } else alert('Access Denied: Unrecognized Credentials.');
   };
 
   const fetchCitizens = async () => {
@@ -93,26 +90,6 @@ const Admin = () => {
   const zoneCounts = getZoneCounts();
   const maxCount = Math.max(...Object.values(zoneCounts), 1);
 
-  // VIRTUAL DOM ROW
-  const VirtualRow = ({ index, style }) => {
-    const p = filteredCitizens[index];
-    return (
-      <div style={style} className="flex items-center border-b border-gray-100 hover:bg-slate-50 transition-colors px-4 py-2">
-        <div className="w-[120px] flex-shrink-0">
-          <select value={p.is_flagged ? "Pending" : "Cleared"} onChange={(e) => updateStatus(p.id, e.target.value)} className={`text-[10px] font-bold rounded-lg px-2 py-1 outline-none border shadow-sm ${p.is_flagged ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
-            <option value="Pending">Pending</option><option value="Cleared">Cleared</option>
-          </select>
-        </div>
-        <div className="flex-1 flex items-center gap-4">
-          <img src={p.profile_pic_url} alt="pic" className="w-10 h-10 rounded-lg object-cover border" />
-          <div><div className="font-bold text-sm text-slate-800">{p.full_name}</div><div className="text-[10px] font-black tracking-widest text-slate-500 uppercase">{p.member_id}</div></div>
-        </div>
-        <div className="w-[150px] text-xs font-bold text-slate-700">{p.zone}</div>
-        <div className="w-[120px] text-xs font-mono text-slate-500">{p.voter_id}</div>
-      </div>
-    );
-  };
-
   if (!isAuthenticated) {
     return (
       <div className="max-w-sm mx-auto mt-20">
@@ -140,6 +117,8 @@ const Admin = () => {
 
   return (
     <div className="space-y-6">
+      
+      {/* Top Nav */}
       <div className="bg-white p-4 rounded-2xl border flex flex-col sm:flex-row justify-between items-center gap-4">
         <h2 className="font-bold text-lg flex items-center gap-2">{loginForm.role} Panel {loginForm.role === 'Zonal Admin' && <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">{loginForm.zone}</span>}</h2>
         <div className="flex gap-2 bg-gray-100 p-1 rounded-lg overflow-x-auto">
@@ -150,6 +129,7 @@ const Admin = () => {
         </div>
       </div>
 
+      {/* Cadres Dashboard */}
       {activeTab === 'cadres' && (
         <div className="bg-white rounded-[2rem] border shadow-sm overflow-hidden p-6">
           <div className="flex flex-col sm:flex-row gap-3 w-full items-center mb-6 justify-between">
@@ -169,16 +149,44 @@ const Admin = () => {
           <div className="flex text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-200 px-4 pb-3">
              <div className="w-[120px]">Status</div><div className="flex-1">Member Profile</div><div className="w-[150px]">Zone</div><div className="w-[120px]">Voter ID</div>
           </div>
+          
           <div className="border border-gray-100 rounded-b-xl overflow-hidden">
-            {loading ? <p className="p-8 text-center text-gray-400">Loading DB...</p> : (
-              <List height={600} itemCount={filteredCitizens.length} itemSize={70} width={"100%"}>
-                {VirtualRow}
-              </List>
+            {loading ? <p className="p-8 text-center text-gray-400">Loading Database...</p> : (
+              <>
+                <div className="max-h-[600px] overflow-y-auto">
+                  {/* CRASH FIX: Standard DOM Rendering with 100 Item Limit */}
+                  {filteredCitizens.slice(0, 100).map((p) => (
+                    <div key={p.id} className="flex items-center border-b border-gray-50 hover:bg-slate-50 transition-colors px-4 py-2">
+                      <div className="w-[120px] flex-shrink-0">
+                        <select value={p.is_flagged ? "Pending" : "Cleared"} onChange={(e) => updateStatus(p.id, e.target.value)} className={`text-[10px] font-bold rounded-lg px-2 py-1 outline-none border shadow-sm ${p.is_flagged ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                          <option value="Pending">Pending</option><option value="Cleared">Cleared</option>
+                        </select>
+                      </div>
+                      <div className="flex-1 flex items-center gap-4">
+                        <img src={p.profile_pic_url} alt="pic" className="w-10 h-10 rounded-lg object-cover border" />
+                        <div><div className="font-bold text-sm text-slate-800">{p.full_name}</div><div className="text-[10px] font-black tracking-widest text-slate-500 uppercase">{p.member_id}</div></div>
+                      </div>
+                      <div className="w-[150px] text-xs font-bold text-slate-700">{p.zone}</div>
+                      <div className="w-[120px] text-xs font-mono text-slate-500">{p.voter_id}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* Visual Indicator for Truncated Data */}
+                {filteredCitizens.length > 100 && (
+                  <div className="p-3 text-center text-xs font-bold text-slate-400 bg-gray-50 border-t">
+                    Showing top 100 of {filteredCitizens.length} results. Use the search bar to find specific cadres.
+                  </div>
+                )}
+                {filteredCitizens.length === 0 && (
+                  <div className="p-8 text-center text-sm font-bold text-slate-400">No records found.</div>
+                )}
+              </>
             )}
           </div>
         </div>
       )}
 
+      {/* Grievances Tab */}
       {activeTab === 'grievances' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {grievances.length === 0 ? <p className="text-slate-400">No grievances reported.</p> : grievances.map(g => (
@@ -190,19 +198,23 @@ const Admin = () => {
               <p className="text-xs text-gray-400 font-mono mb-2">{g.member_id} • {g.zone}</p>
               <p className="text-sm font-medium mt-1 mb-4">{g.description}</p>
               
+              {/* FIXED GOOGLE MAPS GPS LINK */}
+              {g.lat && <a href={`https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`} target="_blank" rel="noreferrer" className="text-xs text-blue-500 font-bold mb-4 block hover:underline">📍 View GPS Location</a>}
+              
               {g.status === 'Open' ? (
                 <div className="border-t pt-4 flex gap-2">
                   <input type="text" placeholder="Type resolution reply..." value={replyInputs[g.id] || ''} onChange={(e)=>setReplyInputs({...replyInputs, [g.id]: e.target.value})} className="flex-1 border rounded-lg px-3 py-2 text-sm outline-none" />
-                  <button onClick={() => handleReplyGrievance(g.id)} className="bg-green-600 text-white font-bold text-xs px-4 rounded-lg">Resolve</button>
+                  <button onClick={() => handleReplyGrievance(g.id)} className="bg-green-600 text-white font-bold text-xs px-4 rounded-lg hover:bg-green-700">Resolve</button>
                 </div>
               ) : (
-                <div className="bg-gray-50 border rounded-lg p-3 mt-2"><p className="text-[10px] font-bold text-gray-400 uppercase">HQ Reply</p><p className="text-sm font-medium text-gray-800">{g.reply}</p></div>
+                <div className="bg-gray-50 border rounded-lg p-3 mt-2"><p className="text-[10px] font-bold text-gray-400 uppercase mb-1">HQ Reply</p><p className="text-sm font-medium text-gray-800">{g.reply}</p></div>
               )}
             </div>
           ))}
         </div>
       )}
 
+      {/* Heatmap Tab */}
       {activeTab === 'heatmap' && (
         <div className="bg-white p-8 rounded-[2rem] border shadow-sm">
           <h2 className="text-xl font-bold mb-6">Zone Registration Heatmap</h2>
@@ -222,11 +234,13 @@ const Admin = () => {
         </div>
       )}
 
+      {/* Broadcast Tab */}
       {activeTab === 'broadcast' && (
         <div className="bg-white p-8 rounded-[2rem] border shadow-sm max-w-xl mx-auto text-center">
           <div className="text-5xl mb-4">💬</div><h2 className="text-xl font-bold mb-2">WhatsApp Bulk Broadcast</h2>
+          <p className="text-sm text-gray-500 mb-6">Send an official HQ update to all Cleared cadres.</p>
           <textarea rows="4" className="w-full border rounded-xl p-4 bg-gray-50 outline-none focus:border-[#8a1c1c] mb-4 text-sm" placeholder="Type your message in Tamil or English..."></textarea>
-          <button onClick={() => alert("Message queued for WhatsApp API delivery via Twilio.")} className="w-full bg-[#8a1c1c] text-white font-bold py-3 rounded-xl shadow-md">Send Broadcast</button>
+          <button onClick={() => alert("Message queued for WhatsApp API delivery via Twilio.")} className="w-full bg-[#8a1c1c] hover:bg-[#6b1515] text-white font-bold py-3 rounded-xl shadow-md">Send Broadcast</button>
         </div>
       )}
     </div>
