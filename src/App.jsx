@@ -25,7 +25,7 @@ const t = {
   },
   ta: {
     enroll: "பதிவு செய்", portal: "உறுப்பினர் பக்கம்", admin: "தலைமையகம்", title: "குடிமக்கள் பதிவு",
-    photo: "புகைப்படம்", name: "முழு பெயர்", dob: "பிறந்த தேதி",
+    photo: "புகைப்படம் (Selfie/Upload)", name: "முழு பெயர்", dob: "பிறந்த தேதி",
     mobile: "கைபேசி எண்", zone: "தொகுதி", ref: "பரிந்துரை எண் (விருப்பம்)",
     voter: "வாக்காளர் அட்டை", aadhaar: "ஆதார் எண்", ration: "குடும்ப அட்டை", pan: "பான் எண்",
     submit: "OTP அனுப்பு", verifyOtp: "சரிபார்த்து அட்டை பெறுக",
@@ -53,19 +53,17 @@ const App = () => {
   const [portalLogin, setPortalLogin] = useState({ memberId: '', phone: '' });
   const [portalUser, setPortalUser] = useState(null);
   const [portalData, setPortalData] = useState({ referrals: 0, badge: 'Thozhar' });
-  const [portalTab, setPortalTab] = useState('id'); // 'id', 'grievance', 'news'
+  const [portalTab, setPortalTab] = useState('id');
   
   // Grievance State
   const [grievance, setGrievance] = useState({ category: 'Water Scarcity', description: '', lat: null, lng: null });
 
-  // Auto-fill Referral ID from URL (e.g. ?ref=TVK-123)
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const refCode = urlParams.get('ref');
     if (refCode) setFormData(prev => ({ ...prev, referralId: refCode }));
   }, []);
 
-  // Toast Auto-hide
   useEffect(() => {
     if (status.message && status.type !== 'success') {
       const timer = setTimeout(() => setStatus({ type: '', message: '', data: null }), 5000);
@@ -74,12 +72,16 @@ const App = () => {
   }, [status]);
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  
+  // FIXED PHOTO UPLOAD HANDLER
   const handleImageChange = (e) => {
     const file = e.target.files[0];
-    if (file) { setImageFile(file); setImagePreview(URL.createObjectURL(file)); }
+    if (file) { 
+      setImageFile(file); 
+      setImagePreview(URL.createObjectURL(file)); 
+    }
   };
 
-  // --- 🎙️ VOICE ASSISTANT ---
   const startVoice = (field) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return alert("Voice typing not supported in this browser.");
@@ -91,7 +93,6 @@ const App = () => {
     };
   };
 
-  // --- 🔒 REGISTRATION & OTP FLOW ---
   const requestOtp = (e) => {
     e.preventDefault();
     if (!imageFile) return setStatus({ type: 'error', message: 'Profile photo is required.' });
@@ -100,7 +101,6 @@ const App = () => {
     setIsSubmitting(true);
     setStatus({ type: 'loading', message: 'Sending OTP to +91 ' + formData.phoneNumber });
     
-    // Simulate SMS API Delay
     setTimeout(() => {
       setIsSubmitting(false);
       setShowOtp(true);
@@ -115,17 +115,29 @@ const App = () => {
     setIsSubmitting(true);
     setStatus({ type: 'loading', message: 'Securing data & generating ID...' });
 
+    // 1. Generate Sequential ID
     const zonePrefix = formData.zone.substring(0, 3).toUpperCase();
     const { count } = await supabase.from('citizens').select('*', { count: 'exact', head: true }).eq('zone', formData.zone);
     const generatedMemberId = `TVK-${zonePrefix}-${String((count || 0) + 1).padStart(4, '0')}`;
 
-    const fileExt = imageFile.name.split('.').pop();
-    const fileName = `public/${generatedMemberId}.${fileExt}`;
-    const { error: uploadError } = await supabase.storage.from('profile_pics').upload(fileName, imageFile, { contentType: imageFile.type, upsert: true });
+    // 2. FILE UPLOAD (RLS FIX)
+    // We force the name to end in .jpg and place it in public/ to satisfy your strict RLS policy.
+    // We also set upsert: false to avoid permissions errors.
+    const fileName = `public/${generatedMemberId}-${Date.now()}.jpg`;
     
-    if (uploadError) { setIsSubmitting(false); return setStatus({ type: 'error', message: `Photo Error: ${uploadError.message}` }); }
+    const { error: uploadError } = await supabase.storage.from('profile_pics').upload(fileName, imageFile, { 
+      contentType: imageFile.type, 
+      upsert: false 
+    });
+    
+    if (uploadError) { 
+      setIsSubmitting(false); 
+      return setStatus({ type: 'error', message: `Photo Error: ${uploadError.message}` }); 
+    }
+    
     const profilePicUrl = supabase.storage.from('profile_pics').getPublicUrl(fileName).data.publicUrl;
 
+    // 3. Save Record
     const newCitizen = {
       member_id: generatedMemberId, full_name: formData.fullName, dob: formData.dob, zone: formData.zone, 
       voter_id: formData.voterId.toUpperCase(), family_card: formData.familyCard || null, 
@@ -147,7 +159,6 @@ const App = () => {
     }
   };
 
-  // --- 👥 PORTAL LOGIC ---
   const handlePortalLogin = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -158,9 +169,9 @@ const App = () => {
       setStatus({ type: 'error', message: 'Invalid Credentials.' });
     } else {
       const { count } = await supabase.from('citizens').select('*', { count: 'exact', head: true }).eq('referral_id', data.member_id);
-      let badge = t[lang].badge0;
-      if (count >= 10 && count < 50) badge = t[lang].badge1;
-      if (count >= 50) badge = t[lang].badge2;
+      let badge = "Thozhar";
+      if (count >= 10 && count < 50) badge = "Makkal Thondan";
+      if (count >= 50) badge = "Mandram Leader";
       
       setPortalUser(data);
       setPortalData({ referrals: count || 0, badge });
@@ -189,6 +200,7 @@ const App = () => {
   return (
     <div className="min-h-screen flex flex-col font-sans text-slate-800 bg-[#f8fafc]">
       
+      {/* Toast */}
       {status.message && !status.data && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-5">
           <div className={`px-6 py-4 rounded-full shadow-2xl border text-white font-bold text-sm ${status.type === 'error' ? 'bg-red-500 border-red-400' : status.type === 'success' ? 'bg-emerald-500 border-emerald-400' : 'bg-amber-500 border-amber-400'}`}>
@@ -204,12 +216,12 @@ const App = () => {
             <div className="w-10 h-10 rounded-full border-2 border-[#facc15] flex items-center justify-center"><span className="text-[#facc15]">🐘</span></div>
             <h1 className="text-xl font-bold text-[#facc15]">TVK Connect</h1>
           </div>
-          <div className="flex bg-[#3e0808] p-1 rounded-full border border-[#7a1313] gap-1">
-            <button onClick={() => setActiveTab('registration')} className={`px-4 py-1.5 rounded-full text-xs font-bold ${activeTab === 'registration' ? 'bg-[#facc15] text-[#5a0c0c]' : 'text-[#facc15]'}`}>{t[lang].enroll}</button>
-            <button onClick={() => setActiveTab('portal')} className={`px-4 py-1.5 rounded-full text-xs font-bold ${activeTab === 'portal' ? 'bg-[#facc15] text-[#5a0c0c]' : 'text-[#facc15]'}`}>{t[lang].portal}</button>
-            <button onClick={() => setActiveTab('admin')} className={`px-4 py-1.5 rounded-full text-xs font-bold ${activeTab === 'admin' ? 'bg-[#facc15] text-[#5a0c0c]' : 'text-[#facc15]'}`}>{t[lang].admin}</button>
+          <div className="flex bg-[#3e0808] p-1 rounded-full border border-[#7a1313] gap-1 overflow-x-auto">
+            <button onClick={() => setActiveTab('registration')} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap ${activeTab === 'registration' ? 'bg-[#facc15] text-[#5a0c0c]' : 'text-[#facc15]'}`}>{t[lang].enroll}</button>
+            <button onClick={() => setActiveTab('portal')} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap ${activeTab === 'portal' ? 'bg-[#facc15] text-[#5a0c0c]' : 'text-[#facc15]'}`}>{t[lang].portal}</button>
+            <button onClick={() => setActiveTab('admin')} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap ${activeTab === 'admin' ? 'bg-[#facc15] text-[#5a0c0c]' : 'text-[#facc15]'}`}>{t[lang].admin}</button>
           </div>
-          <button onClick={() => setLang(lang === 'en' ? 'ta' : 'en')} className="text-white text-xs font-bold bg-white/10 px-3 py-1 rounded-full border border-white/20">
+          <button onClick={() => setLang(lang === 'en' ? 'ta' : 'en')} className="text-white text-xs font-bold bg-white/10 px-3 py-1 rounded-full border border-white/20 whitespace-nowrap">
             {lang === 'en' ? 'தமிழ்' : 'English'}
           </button>
         </div>
@@ -230,7 +242,7 @@ const App = () => {
                       <h2 className="text-2xl font-black mt-1">TVK CADRE</h2>
                       <p className="font-mono text-sm mt-2 bg-black/30 px-3 py-1 rounded inline-block">{status.data.member_id}</p>
                     </div>
-                    {/* --- 📱 QR CODE INJECTION --- */}
+                    {/* QR Code */}
                     <div className="bg-white p-2 rounded-xl shadow-inner">
                       <QRCodeCanvas value={status.data.member_id} size={64} bgColor={"#ffffff"} fgColor={"#8a1c1c"} />
                     </div>
@@ -247,7 +259,7 @@ const App = () => {
                 <button onClick={() => window.print()} className="mt-6 bg-white border font-bold py-3 px-8 rounded-full shadow-md hover:text-[#8a1c1c]">{t[lang].print}</button>
               </div>
             ) : (
-              <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden p-8">
+              <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden p-8 md:p-12">
                 <h2 className="text-2xl font-bold text-slate-800">{t[lang].title}</h2>
                 <hr className="my-6 border-gray-100" />
                 
@@ -259,20 +271,32 @@ const App = () => {
                     <button type="submit" disabled={isSubmitting} className="w-full bg-[#8a1c1c] text-white font-bold py-3 rounded-xl shadow-md disabled:opacity-50">
                       {isSubmitting ? 'Verifying...' : t[lang].verifyOtp}
                     </button>
-                    <button type="button" onClick={() => setShowOtp(false)} className="text-xs text-gray-400 font-bold">Cancel</button>
+                    <button type="button" onClick={() => setShowOtp(false)} className="text-xs text-gray-400 font-bold hover:text-red-600 transition-colors">Cancel & Edit Form</button>
                   </form>
                 ) : (
                   <form onSubmit={requestOtp} className="space-y-6">
-                    <div className="flex flex-col">
-                      <label className="text-xs font-bold text-slate-400 mb-2">{t[lang].photo} *</label>
-                      <input type="file" accept="image/*" onChange={handleImageChange} className="text-sm" required />
+                    
+                    {/* FIXED FILE UPLOAD UI */}
+                    <div className="mb-8">
+                      <label className="text-xs font-bold text-slate-400 mb-2 block">{t[lang].photo} *</label>
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                        {imagePreview ? (
+                          <img src={imagePreview} className="w-20 h-20 rounded-2xl object-cover border-4 border-gray-100 shadow-sm" alt="Preview" />
+                        ) : (
+                          <div className="w-20 h-20 rounded-2xl bg-gray-50 border-2 border-dashed border-gray-300 flex items-center justify-center text-3xl shadow-sm text-gray-400">📸</div>
+                        )}
+                        <div className="w-full sm:w-auto">
+                          <input type="file" accept="image/*" onChange={handleImageChange} required className="block w-full text-sm text-slate-500 file:mr-4 file:py-2.5 file:px-6 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-red-50 file:text-[#8a1c1c] hover:file:bg-red-100 cursor-pointer transition-colors" />
+                        </div>
+                      </div>
                     </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                       <div className="flex flex-col">
                         <label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].name} *</label>
                         <div className="flex items-center border-b border-gray-300 focus-within:border-[#8a1c1c]">
                           <input type="text" name="fullName" value={formData.fullName} onChange={handleChange} required className="w-full py-2 outline-none" />
-                          <button type="button" onClick={() => startVoice('fullName')} className="p-2 text-gray-400 hover:text-red-600 transition-colors" title="Voice Type">🎤</button>
+                          <button type="button" onClick={() => startVoice('fullName')} className="p-2 text-gray-400 hover:text-[#8a1c1c] transition-colors" title="Voice Type">🎤</button>
                         </div>
                       </div>
                       <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].dob} *</label><input type="date" name="dob" value={formData.dob} onChange={handleChange} required className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c]" /></div>
@@ -284,6 +308,7 @@ const App = () => {
                         </select>
                       </div>
                       <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].voter} *</label><input type="text" name="voterId" value={formData.voterId} onChange={handleChange} required className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c] uppercase" /></div>
+                      <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].aadhaar}</label><input type="text" name="aadhaarNumber" value={formData.aadhaarNumber} onChange={handleChange} maxLength="12" className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c]" /></div>
                       <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].ref}</label><input type="text" name="referralId" value={formData.referralId} onChange={handleChange} className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c] uppercase" /></div>
                     </div>
                     <div className="pt-6 flex justify-end">
@@ -358,7 +383,7 @@ const App = () => {
                             <p className="text-sm text-blue-800">State conference scheduled for next week in Villupuram. All Mandram Leaders are expected to attend.</p>
                           </div>
                           <div className="p-4 border border-gray-100 rounded-xl">
-                            <h4 className="font-bold mb-1">🏅 Leaderboard: {portalUser.zone}</h4>
+                            <h4 className="font-bold mb-1">🏅 {t[lang].leaderboard}: {portalUser.zone}</h4>
                             <p className="text-sm text-gray-500 mb-2">Top recruiters in your area this month:</p>
                             <ol className="list-decimal pl-5 text-sm font-bold text-[#8a1c1c]">
                               <li>TVK-WHI-0012 (142 members)</li>
@@ -371,11 +396,11 @@ const App = () => {
 
                       {portalTab === 'grievance' && (
                         <form onSubmit={submitGrievance} className="space-y-4">
-                          <select value={grievance.category} onChange={e=>setGrievance({...grievance, category: e.target.value})} className="w-full border p-3 rounded-xl bg-gray-50 outline-none">
+                          <select value={grievance.category} onChange={e=>setGrievance({...grievance, category: e.target.value})} className="w-full border p-3 rounded-xl bg-gray-50 outline-none focus:border-[#8a1c1c]">
                             <option>Water Scarcity</option><option>Road Damage</option><option>Electricity</option><option>Corruption</option>
                           </select>
-                          <textarea rows="4" required value={grievance.description} onChange={e=>setGrievance({...grievance, description: e.target.value})} className="w-full border p-3 rounded-xl bg-gray-50 outline-none" placeholder={t[lang].issueDesc}></textarea>
-                          <button type="button" onClick={getGPS} className="text-xs font-bold text-blue-600 bg-blue-50 px-4 py-2 rounded-lg">{t[lang].location} {grievance.lat && '✅'}</button>
+                          <textarea rows="4" required value={grievance.description} onChange={e=>setGrievance({...grievance, description: e.target.value})} className="w-full border p-3 rounded-xl bg-gray-50 outline-none focus:border-[#8a1c1c]" placeholder={t[lang].issueDesc}></textarea>
+                          <button type="button" onClick={getGPS} className="text-xs font-bold text-blue-600 bg-blue-50 px-4 py-2 rounded-lg border border-blue-100">{t[lang].location} {grievance.lat && '✅'}</button>
                           <button type="submit" className="w-full bg-[#8a1c1c] text-white font-bold py-3 rounded-xl">{t[lang].submitIssue}</button>
                         </form>
                       )}
