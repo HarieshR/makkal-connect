@@ -44,10 +44,14 @@ const Admin = () => {
     setLoading(false);
   };
 
-  const toggleFlag = async (id, currentFlagStatus) => {
-    const { error } = await supabase.from('citizens').update({ is_flagged: !currentFlagStatus }).eq('id', id);
+  // Maps Dropdown "Pending" (true) or "Cleared" (false) to the database
+  const updateStatus = async (id, newStatusValue) => {
+    const isPending = newStatusValue === 'Pending';
+    const { error } = await supabase.from('citizens').update({ is_flagged: isPending }).eq('id', id);
     if (!error) {
-      setCitizens(citizens.map(c => c.id === id ? { ...c, is_flagged: !currentFlagStatus } : c));
+      setCitizens(citizens.map(c => c.id === id ? { ...c, is_flagged: isPending } : c));
+    } else {
+      alert("Error updating status.");
     }
   };
 
@@ -56,7 +60,7 @@ const Admin = () => {
     const csvContent = "data:text/csv;charset=utf-8," 
       + "Name,Member ID,Mobile Number,Constituency Area,Voter ID,Ration Card,Referral ID,Status\n"
       + dataToExport.map(c => 
-          `${c.full_name},${c.member_id || 'N/A'},${c.phone_number},${c.zone},${c.voter_id},${c.family_card || 'N/A'},${c.referral_id || 'N/A'},${c.is_flagged ? 'Flagged' : 'Clear'}`
+          `${c.full_name},${c.member_id || 'N/A'},${c.phone_number},${c.zone},${c.voter_id},${c.family_card || 'N/A'},${c.referral_id || 'N/A'},${c.is_flagged ? 'Pending' : 'Cleared'}`
         ).join("\n");
 
     const encodedUri = encodeURI(csvContent);
@@ -69,12 +73,13 @@ const Admin = () => {
   };
 
   const filteredCitizens = citizens.filter((person) => {
-    const matchesSearch = person.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || person.voter_id?.toLowerCase().includes(searchTerm.toLowerCase()) || person.family_card?.includes(searchTerm);
+    const matchesSearch = person.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || person.voter_id?.toLowerCase().includes(searchTerm.toLowerCase()) || person.member_id?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesZone = selectedZone === 'All' || person.zone === selectedZone;
     return matchesSearch && matchesZone;
   });
 
   const totalRegistrations = citizens.length;
+  const pendingCount = citizens.filter(c => c.is_flagged).length;
 
   if (!isAuthenticated) {
     return (
@@ -119,7 +124,7 @@ const Admin = () => {
             <span>📥</span> Generate Report
           </button>
           <div className="relative w-full sm:w-64">
-            <input type="text" placeholder="Search Voter or Ration ID..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50 shadow-inner focus:bg-white focus:ring-2 focus:ring-[#8a1c1c]/20 focus:border-[#8a1c1c] outline-none text-sm font-medium transition-all" />
+            <input type="text" placeholder="Search Member ID, Name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50 shadow-inner focus:bg-white focus:ring-2 focus:ring-[#8a1c1c]/20 focus:border-[#8a1c1c] outline-none text-sm font-medium transition-all" />
             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</div>
           </div>
         </div>
@@ -135,7 +140,7 @@ const Admin = () => {
             <table className="w-full text-left border-collapse min-w-[1000px]">
               <thead>
                 <tr>
-                  <th className="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100 text-center">Flag</th>
+                  <th className="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100">Status</th>
                   <th className="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100">Member</th>
                   <th className="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100">ID / Location</th>
                   <th className="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100">Documents</th>
@@ -144,29 +149,36 @@ const Admin = () => {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filteredCitizens.length === 0 ? (
-                  <tr><td colSpan="5" className="py-16 text-center text-slate-400 font-medium">No matching records found in this constituency.</td></tr>
+                  <tr><td colSpan="5" className="py-16 text-center text-slate-400 font-medium">No matching records found.</td></tr>
                 ) : (
                   filteredCitizens.map((person) => (
-                    <tr key={person.id} className={`${person.is_flagged ? 'bg-red-50/70 hover:bg-red-50' : 'hover:bg-slate-50/50'} transition-colors group cursor-default`}>
+                    <tr key={person.id} className={`${person.is_flagged ? 'bg-amber-50/30 hover:bg-amber-50' : 'hover:bg-slate-50/50'} transition-colors group cursor-default`}>
                       
-                      <td className="px-6 py-5 text-center">
-                        <button 
-                          onClick={() => toggleFlag(person.id, person.is_flagged)} 
-                          className={`w-6 h-6 rounded-full border-2 mx-auto flex items-center justify-center transition-all ${person.is_flagged ? 'border-[#8a1c1c] bg-[#8a1c1c] shadow-inner' : 'border-gray-300 bg-white hover:border-[#8a1c1c]'}`}
+                      {/* --- NEW DROPDOWN STATUS SELECTOR --- */}
+                      <td className="px-6 py-5">
+                        <select 
+                          value={person.is_flagged ? "Pending" : "Cleared"}
+                          onChange={(e) => updateStatus(person.id, e.target.value)}
+                          className={`text-xs font-bold rounded-lg px-3 py-1.5 outline-none cursor-pointer border shadow-sm transition-colors ${
+                            person.is_flagged 
+                              ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' 
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          }`}
                         >
-                          {person.is_flagged && <div className="w-2.5 h-2.5 bg-white rounded-full"></div>}
-                        </button>
+                          <option value="Pending">Pending</option>
+                          <option value="Cleared">Cleared</option>
+                        </select>
                       </td>
 
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-4">
                           {person.profile_pic_url ? (
-                            <img src={person.profile_pic_url} alt="Profile" className={`w-12 h-12 rounded-xl object-cover border-2 ${person.is_flagged ? 'border-red-300' : 'border-gray-200'}`} />
+                            <img src={person.profile_pic_url} alt="Profile" className={`w-12 h-12 rounded-xl object-cover border-2 ${person.is_flagged ? 'border-amber-300' : 'border-emerald-200'}`} />
                           ) : (
                             <div className="w-12 h-12 rounded-xl bg-slate-100 border-2 border-slate-200 flex items-center justify-center text-slate-400 text-xs font-bold">N/A</div>
                           )}
                           <div>
-                            <div className={`font-bold text-base ${person.is_flagged ? 'text-[#8a1c1c]' : 'text-slate-800'}`}>{person.full_name}</div>
+                            <div className={`font-bold text-base ${person.is_flagged ? 'text-amber-900' : 'text-slate-800'}`}>{person.full_name}</div>
                             <div className="text-[10px] font-black tracking-widest text-slate-500 uppercase mt-0.5">{person.member_id}</div>
                           </div>
                         </div>
@@ -185,7 +197,7 @@ const Admin = () => {
                       </td>
 
                       <td className="px-6 py-5 text-right">
-                        <div className="text-xs font-black text-emerald-600 uppercase tracking-widest mb-1">{person.referral_id || '—'}</div>
+                        <div className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">{person.referral_id || '—'}</div>
                         <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">DOB: {person.dob ? new Date(person.dob).toLocaleDateString('en-GB') : '—'}</div>
                       </td>
                       
