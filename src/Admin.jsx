@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
-import { FixedSizeList as List } from 'react-window';
+import * as ReactWindow from 'react-window'; // FIXED IMPORT
+
+const List = ReactWindow.FixedSizeList; // EXTRACTED SAFELY
 
 const CONSTITUENCIES = [
   "Manadipet", "Thirubhuvanai", "Oussudu", "Mangalam", "Villianur", "Ozhukarai", "Kadirgamam", 
@@ -152,7 +154,7 @@ const Admin = () => {
         <div className="bg-white rounded-[2rem] border shadow-sm overflow-hidden p-6">
           <div className="flex flex-col sm:flex-row gap-3 w-full items-center mb-6 justify-between">
             <div className="flex gap-3 w-full sm:w-auto">
-              <select value={selectedZone} onChange={(e) => setSelectedZone(e.target.value)} disabled={loginForm.role === 'Zonal Admin'} className="w-full sm:w-40 bg-gray-50 border border-gray-200 text-slate-700 text-sm font-bold rounded-xl px-4 py-2 outline-none cursor-pointer">
+              <select value={selectedZone} onChange={(e) => setSelectedZone(e.target.value)} disabled={loginForm.role === 'Zonal Admin'} className="w-full sm:w-40 bg-gray-50 border border-gray-200 text-slate-700 text-sm font-bold rounded-xl px-4 py-2 outline-none cursor-pointer disabled:opacity-70">
                 {loginForm.role === 'Super Admin' && <option value="All">All Zones</option>}
                 {loginForm.role === 'Zonal Admin' ? <option value={loginForm.zone}>{loginForm.zone}</option> : CONSTITUENCIES.map((z, i) => <option key={i} value={z}>{z}</option>)}
               </select>
