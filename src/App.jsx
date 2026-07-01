@@ -73,7 +73,6 @@ const App = () => {
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
   
-  // FIXED PHOTO UPLOAD HANDLER
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) { 
@@ -121,8 +120,6 @@ const App = () => {
     const generatedMemberId = `TVK-${zonePrefix}-${String((count || 0) + 1).padStart(4, '0')}`;
 
     // 2. FILE UPLOAD (RLS FIX)
-    // We force the name to end in .jpg and place it in public/ to satisfy your strict RLS policy.
-    // We also set upsert: false to avoid permissions errors.
     const fileName = `public/${generatedMemberId}-${Date.now()}.jpg`;
     
     const { error: uploadError } = await supabase.storage.from('profile_pics').upload(fileName, imageFile, { 
@@ -137,10 +134,10 @@ const App = () => {
     
     const profilePicUrl = supabase.storage.from('profile_pics').getPublicUrl(fileName).data.publicUrl;
 
-    // 3. Save Record
+    // 3. Save Record (Family card is now always present due to form validation)
     const newCitizen = {
       member_id: generatedMemberId, full_name: formData.fullName, dob: formData.dob, zone: formData.zone, 
-      voter_id: formData.voterId.toUpperCase(), family_card: formData.familyCard || null, 
+      voter_id: formData.voterId.toUpperCase(), family_card: formData.familyCard, 
       pan_number: formData.panNumber ? formData.panNumber.toUpperCase() : null, aadhaar_number: formData.aadhaarNumber || null, 
       phone_number: formData.phoneNumber, referral_id: formData.referralId ? formData.referralId.toUpperCase() : null,
       profile_pic_url: profilePicUrl, is_flagged: true
@@ -242,7 +239,6 @@ const App = () => {
                       <h2 className="text-2xl font-black mt-1">TVK CADRE</h2>
                       <p className="font-mono text-sm mt-2 bg-black/30 px-3 py-1 rounded inline-block">{status.data.member_id}</p>
                     </div>
-                    {/* QR Code */}
                     <div className="bg-white p-2 rounded-xl shadow-inner">
                       <QRCodeCanvas value={status.data.member_id} size={64} bgColor={"#ffffff"} fgColor={"#8a1c1c"} />
                     </div>
@@ -276,7 +272,6 @@ const App = () => {
                 ) : (
                   <form onSubmit={requestOtp} className="space-y-6">
                     
-                    {/* FIXED FILE UPLOAD UI */}
                     <div className="mb-8">
                       <label className="text-xs font-bold text-slate-400 mb-2 block">{t[lang].photo} *</label>
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -308,7 +303,15 @@ const App = () => {
                         </select>
                       </div>
                       <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].voter} *</label><input type="text" name="voterId" value={formData.voterId} onChange={handleChange} required className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c] uppercase" /></div>
+                      
+                      {/* --- NOW MANDATORY FIELD --- */}
+                      <div className="flex flex-col">
+                        <label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].ration} *</label>
+                        <input type="text" name="familyCard" value={formData.familyCard} onChange={handleChange} required className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c] uppercase" />
+                      </div>
+
                       <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].aadhaar}</label><input type="text" name="aadhaarNumber" value={formData.aadhaarNumber} onChange={handleChange} maxLength="12" className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c]" /></div>
+                      <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].pan}</label><input type="text" name="panNumber" value={formData.panNumber} onChange={handleChange} maxLength="10" className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c] uppercase" /></div>
                       <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].ref}</label><input type="text" name="referralId" value={formData.referralId} onChange={handleChange} className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c] uppercase" /></div>
                     </div>
                     <div className="pt-6 flex justify-end">
@@ -335,7 +338,6 @@ const App = () => {
               </form>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-                {/* Gamification Sidebar */}
                 <div className="col-span-1 space-y-4">
                   <div className="bg-white p-6 rounded-3xl shadow-sm border text-center">
                     <img src={portalUser.profile_pic_url} className="w-24 h-24 mx-auto rounded-full object-cover border-4 border-gray-100 mb-4" alt="profile"/>
@@ -355,7 +357,6 @@ const App = () => {
                   <button onClick={() => setPortalUser(null)} className="w-full bg-gray-100 text-slate-600 font-bold py-3 rounded-xl">Sign Out</button>
                 </div>
 
-                {/* Main Content */}
                 <div className="col-span-1 md:col-span-2">
                   <div className="bg-white rounded-3xl shadow-sm border overflow-hidden min-h-[400px]">
                     <div className="flex border-b overflow-x-auto">
