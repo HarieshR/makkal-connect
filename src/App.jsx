@@ -11,7 +11,7 @@ const CONSTITUENCIES = [
   "Karaikal North", "Karaikal South", "Neravy", "Mahe", "Yanam"
 ];
 
-// --- 🌐 DICTIONARY FOR LOCALIZATION ---
+// --- 🌐 LOCALIZATION DICTIONARY ---
 const t = {
   en: {
     enroll: "Enroll", portal: "Member Portal", admin: "HQ Admin", title: "Citizen Enrollment",
@@ -21,17 +21,19 @@ const t = {
     submit: "Send OTP Verification", verifyOtp: "Verify & Generate ID",
     idCard: "Digital ID Card", print: "Print / Save ID Card", news: "HQ Live Updates",
     grievance: "Report Issue", leaderboard: "Top Recruiters", share: "📱 Share Invite Link",
-    issueDesc: "Describe Issue...", location: "📍 Fetch GPS Location", submitIssue: "Submit to HQ"
+    issueDesc: "Describe the issue in detail...", location: "📍 Fetch GPS Location", submitIssue: "Submit to HQ",
+    badge0: "Thozhar", badge1: "Makkal Thondan", badge2: "Mandram Leader"
   },
   ta: {
     enroll: "பதிவு செய்", portal: "உறுப்பினர் பக்கம்", admin: "தலைமையகம்", title: "குடிமக்கள் பதிவு",
-    photo: "புகைப்படம் (Selfie/Upload)", name: "முழு பெயர்", dob: "பிறந்த தேதி",
+    photo: "புகைப்படம்", name: "முழு பெயர்", dob: "பிறந்த தேதி",
     mobile: "கைபேசி எண்", zone: "தொகுதி", ref: "பரிந்துரை எண் (விருப்பம்)",
     voter: "வாக்காளர் அட்டை", aadhaar: "ஆதார் எண்", ration: "குடும்ப அட்டை", pan: "பான் எண்",
     submit: "OTP அனுப்பு", verifyOtp: "சரிபார்த்து அட்டை பெறுக",
     idCard: "டிஜிட்டல் அடையாள அட்டை", print: "அட்டையை சேமிக்க", news: "நேரலை செய்திகள்",
     grievance: "புகார் அளி", leaderboard: "சிறந்த தொடர்பாளர்கள்", share: "📱 பகிர்வு இணைப்பு",
-    issueDesc: "பிரச்சனையை விவரிக்கவும்...", location: "📍 GPS இருப்பிடம்", submitIssue: "தலைமையகத்திற்கு அனுப்பு"
+    issueDesc: "பிரச்சனையை விவரிக்கவும்...", location: "📍 GPS இருப்பிடம்", submitIssue: "தலைமையகத்திற்கு அனுப்பு",
+    badge0: "தோழர்", badge1: "மக்கள் தொண்டன்", badge2: "மன்ற தலைவர்"
   }
 };
 
@@ -53,11 +55,12 @@ const App = () => {
   const [portalLogin, setPortalLogin] = useState({ memberId: '', phone: '' });
   const [portalUser, setPortalUser] = useState(null);
   const [portalData, setPortalData] = useState({ referrals: 0, badge: 'Thozhar' });
-  const [portalTab, setPortalTab] = useState('id');
+  const [portalTab, setPortalTab] = useState('id'); // 'id', 'news', 'grievance'
   
   // Grievance State
   const [grievance, setGrievance] = useState({ category: 'Water Scarcity', description: '', lat: null, lng: null });
 
+  // Auto-fill Referral ID from URL URL?ref=TVK-XXX
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const refCode = urlParams.get('ref');
@@ -72,15 +75,14 @@ const App = () => {
   }, [status]);
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handlePortalChange = (e) => setPortalLogin({ ...portalLogin, [e.target.name]: e.target.value });
   
   const handleImageChange = (e) => {
     const file = e.target.files[0];
-    if (file) { 
-      setImageFile(file); 
-      setImagePreview(URL.createObjectURL(file)); 
-    }
+    if (file) { setImageFile(file); setImagePreview(URL.createObjectURL(file)); }
   };
 
+  // --- 🎙️ VOICE ASSISTANT ---
   const startVoice = (field) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return alert("Voice typing not supported in this browser.");
@@ -92,6 +94,7 @@ const App = () => {
     };
   };
 
+  // --- 🔒 REGISTRATION & OTP ---
   const requestOtp = (e) => {
     e.preventDefault();
     if (!imageFile) return setStatus({ type: 'error', message: 'Profile photo is required.' });
@@ -100,6 +103,7 @@ const App = () => {
     setIsSubmitting(true);
     setStatus({ type: 'loading', message: 'Sending OTP to +91 ' + formData.phoneNumber });
     
+    // Simulate SMS Delay
     setTimeout(() => {
       setIsSubmitting(false);
       setShowOtp(true);
@@ -114,30 +118,22 @@ const App = () => {
     setIsSubmitting(true);
     setStatus({ type: 'loading', message: 'Securing data & generating ID...' });
 
-    // 1. Generate Sequential ID
+    // Generate Sequential ID
     const zonePrefix = formData.zone.substring(0, 3).toUpperCase();
     const { count } = await supabase.from('citizens').select('*', { count: 'exact', head: true }).eq('zone', formData.zone);
     const generatedMemberId = `TVK-${zonePrefix}-${String((count || 0) + 1).padStart(4, '0')}`;
 
-    // 2. FILE UPLOAD (RLS FIX)
+    // Force .jpg and public folder for RLS policy
     const fileName = `public/${generatedMemberId}-${Date.now()}.jpg`;
     
-    const { error: uploadError } = await supabase.storage.from('profile_pics').upload(fileName, imageFile, { 
-      contentType: imageFile.type, 
-      upsert: false 
-    });
-    
-    if (uploadError) { 
-      setIsSubmitting(false); 
-      return setStatus({ type: 'error', message: `Photo Error: ${uploadError.message}` }); 
-    }
+    const { error: uploadError } = await supabase.storage.from('profile_pics').upload(fileName, imageFile, { contentType: imageFile.type, upsert: false });
+    if (uploadError) { setIsSubmitting(false); return setStatus({ type: 'error', message: `Photo Error: ${uploadError.message}` }); }
     
     const profilePicUrl = supabase.storage.from('profile_pics').getPublicUrl(fileName).data.publicUrl;
 
-    // 3. Save Record (Family card is now always present due to form validation)
     const newCitizen = {
       member_id: generatedMemberId, full_name: formData.fullName, dob: formData.dob, zone: formData.zone, 
-      voter_id: formData.voterId.toUpperCase(), family_card: formData.familyCard, 
+      voter_id: formData.voterId.toUpperCase(), family_card: formData.familyCard, // Now mandatory
       pan_number: formData.panNumber ? formData.panNumber.toUpperCase() : null, aadhaar_number: formData.aadhaarNumber || null, 
       phone_number: formData.phoneNumber, referral_id: formData.referralId ? formData.referralId.toUpperCase() : null,
       profile_pic_url: profilePicUrl, is_flagged: true
@@ -150,29 +146,33 @@ const App = () => {
       setStatus({ type: 'error', message: error.message.includes('voter_id') ? 'Voter ID is already registered.' : 'Database Error.' });
     } else {
       setShowOtp(false);
-      setStatus({ type: 'success', message: 'Registration Complete!', data: newCitizen });
+      setStatus({ type: 'success', message: 'Registration Complete! Account Pending Verification.', data: newCitizen });
       setFormData({ fullName: '', dob: '', zone: '', voterId: '', familyCard: '', panNumber: '', aadhaarNumber: '', phoneNumber: '', referralId: '' });
       setImageFile(null); setImagePreview(null); setOtpInput('');
     }
   };
 
+  // --- 👥 MEMBER PORTAL LOGIC ---
   const handlePortalLogin = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    
-    const { data, error } = await supabase.from('citizens').select('*').eq('member_id', portalLogin.memberId.toUpperCase()).eq('phone_number', portalLogin.phone).single();
-    
-    if (error || !data) {
-      setStatus({ type: 'error', message: 'Invalid Credentials.' });
-    } else {
-      const { count } = await supabase.from('citizens').select('*', { count: 'exact', head: true }).eq('referral_id', data.member_id);
-      let badge = "Thozhar";
-      if (count >= 10 && count < 50) badge = "Makkal Thondan";
-      if (count >= 50) badge = "Mandram Leader";
+    try {
+      const { data, error } = await supabase.from('citizens').select('*').eq('member_id', portalLogin.memberId.toUpperCase()).eq('phone_number', portalLogin.phone).single();
       
-      setPortalUser(data);
-      setPortalData({ referrals: count || 0, badge });
-      setStatus({ type: '', message: '' });
+      if (error || !data) {
+        setStatus({ type: 'error', message: 'Invalid Credentials.' });
+      } else {
+        const { count } = await supabase.from('citizens').select('*', { count: 'exact', head: true }).eq('referral_id', data.member_id);
+        let badge = t[lang].badge0;
+        if (count >= 10 && count < 50) badge = t[lang].badge1;
+        if (count >= 50) badge = t[lang].badge2;
+        
+        setPortalUser(data);
+        setPortalData({ referrals: count || 0, badge });
+        setStatus({ type: '', message: '' });
+      }
+    } catch (err) {
+      setStatus({ type: 'error', message: 'An error occurred during login.' });
     }
     setIsSubmitting(false);
   };
@@ -190,14 +190,14 @@ const App = () => {
   };
 
   const shareWhatsApp = () => {
-    const text = `Join Tamizhaga Vettri Kazhagam! Register using my referral ID: *${portalUser.member_id}*. Link: https://tvk-makkal-connect.vercel.app/?ref=${portalUser.member_id}`;
+    const text = `Join Tamizhaga Vettri Kazhagam! Register using my referral ID: *${portalUser?.member_id}*. Link: https://tvk-makkal-connect.vercel.app/?ref=${portalUser?.member_id}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   return (
     <div className="min-h-screen flex flex-col font-sans text-slate-800 bg-[#f8fafc]">
       
-      {/* Toast */}
+      {/* Toast Notification */}
       {status.message && !status.data && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-5">
           <div className={`px-6 py-4 rounded-full shadow-2xl border text-white font-bold text-sm ${status.type === 'error' ? 'bg-red-500 border-red-400' : status.type === 'success' ? 'bg-emerald-500 border-emerald-400' : 'bg-amber-500 border-amber-400'}`}>
@@ -206,7 +206,7 @@ const App = () => {
         </div>
       )}
 
-      {/* Nav */}
+      {/* Navigation */}
       <nav className="sticky top-0 z-40 bg-gradient-to-r from-[#5a0c0c] via-[#8a1c1c] to-[#5a0c0c] shadow-lg border-b border-[#a32a2a]">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
@@ -224,10 +224,13 @@ const App = () => {
         </div>
       </nav>
 
+      {/* Main Container */}
       <main className="flex-grow max-w-5xl mx-auto px-4 mt-8 mb-20 w-full">
+        
+        {/* --- 1. ADMIN TAB --- */}
         {activeTab === 'admin' && <Admin />}
 
-        {/* --- REGISTRATION TAB --- */}
+        {/* --- 2. REGISTRATION TAB --- */}
         {activeTab === 'registration' && (
           <div className="max-w-4xl mx-auto animate-in fade-in">
             {status.data ? (
@@ -239,6 +242,7 @@ const App = () => {
                       <h2 className="text-2xl font-black mt-1">TVK CADRE</h2>
                       <p className="font-mono text-sm mt-2 bg-black/30 px-3 py-1 rounded inline-block">{status.data.member_id}</p>
                     </div>
+                    {/* QR Code Injection */}
                     <div className="bg-white p-2 rounded-xl shadow-inner">
                       <QRCodeCanvas value={status.data.member_id} size={64} bgColor={"#ffffff"} fgColor={"#8a1c1c"} />
                     </div>
@@ -271,7 +275,6 @@ const App = () => {
                   </form>
                 ) : (
                   <form onSubmit={requestOtp} className="space-y-6">
-                    
                     <div className="mb-8">
                       <label className="text-xs font-bold text-slate-400 mb-2 block">{t[lang].photo} *</label>
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -304,15 +307,12 @@ const App = () => {
                       </div>
                       <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].voter} *</label><input type="text" name="voterId" value={formData.voterId} onChange={handleChange} required className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c] uppercase" /></div>
                       
-                      {/* --- NOW MANDATORY FIELD --- */}
-                      <div className="flex flex-col">
-                        <label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].ration} *</label>
-                        <input type="text" name="familyCard" value={formData.familyCard} onChange={handleChange} required className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c] uppercase" />
-                      </div>
-
+                      {/* Mandatory Family Card */}
+                      <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].ration} *</label><input type="text" name="familyCard" value={formData.familyCard} onChange={handleChange} required className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c] uppercase" /></div>
+                      
                       <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].aadhaar}</label><input type="text" name="aadhaarNumber" value={formData.aadhaarNumber} onChange={handleChange} maxLength="12" className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c]" /></div>
                       <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].pan}</label><input type="text" name="panNumber" value={formData.panNumber} onChange={handleChange} maxLength="10" className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c] uppercase" /></div>
-                      <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].ref}</label><input type="text" name="referralId" value={formData.referralId} onChange={handleChange} className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c] uppercase" /></div>
+                      <div className="flex flex-col md:col-span-2"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].ref}</label><input type="text" name="referralId" value={formData.referralId} onChange={handleChange} className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c] uppercase" placeholder="TVK-..." /></div>
                     </div>
                     <div className="pt-6 flex justify-end">
                       <button type="submit" disabled={isSubmitting} className="bg-[#8a1c1c] text-white font-bold py-3 px-8 rounded-xl shadow-md disabled:opacity-50">
@@ -326,7 +326,7 @@ const App = () => {
           </div>
         )}
 
-        {/* --- MEMBER PORTAL --- */}
+        {/* --- 3. MEMBER PORTAL TAB --- */}
         {activeTab === 'portal' && (
           <div className="max-w-4xl mx-auto animate-in fade-in">
             {!portalUser ? (
@@ -338,17 +338,19 @@ const App = () => {
               </form>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+                
+                {/* Gamification Sidebar */}
                 <div className="col-span-1 space-y-4">
                   <div className="bg-white p-6 rounded-3xl shadow-sm border text-center">
-                    <img src={portalUser.profile_pic_url} className="w-24 h-24 mx-auto rounded-full object-cover border-4 border-gray-100 mb-4" alt="profile"/>
-                    <h3 className="font-bold text-lg">{portalUser.full_name}</h3>
+                    <img src={portalUser?.profile_pic_url} className="w-24 h-24 mx-auto rounded-full object-cover border-4 border-gray-100 mb-4" alt="profile"/>
+                    <h3 className="font-bold text-lg">{portalUser?.full_name}</h3>
                     <div className="mt-4 bg-gradient-to-r from-amber-200 to-[#facc15] py-2 px-4 rounded-xl shadow-sm">
                       <p className="text-[10px] font-bold uppercase text-amber-900">Rank Badge</p>
                       <p className="font-black text-amber-950">{portalData.badge}</p>
                     </div>
                     <div className="mt-4 flex justify-between px-4 border-t pt-4">
                       <div className="text-center"><p className="text-2xl font-black">{portalData.referrals}</p><p className="text-[10px] uppercase font-bold text-slate-400">Referrals</p></div>
-                      <div className="text-center"><p className="text-2xl font-black">{portalUser.is_flagged?'⏳':'✅'}</p><p className="text-[10px] uppercase font-bold text-slate-400">Status</p></div>
+                      <div className="text-center"><p className="text-2xl font-black">{portalUser?.is_flagged?'⏳':'✅'}</p><p className="text-[10px] uppercase font-bold text-slate-400">Status</p></div>
                     </div>
                   </div>
                   <button onClick={shareWhatsApp} className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl shadow-md">
@@ -357,6 +359,7 @@ const App = () => {
                   <button onClick={() => setPortalUser(null)} className="w-full bg-gray-100 text-slate-600 font-bold py-3 rounded-xl">Sign Out</button>
                 </div>
 
+                {/* Main Content */}
                 <div className="col-span-1 md:col-span-2">
                   <div className="bg-white rounded-3xl shadow-sm border overflow-hidden min-h-[400px]">
                     <div className="flex border-b overflow-x-auto">
@@ -366,14 +369,14 @@ const App = () => {
                     </div>
                     
                     <div className="p-8">
+                      
                       {portalTab === 'id' && (
-                        <div className="bg-gradient-to-br from-[#8a1c1c] to-[#5a0c0c] p-6 rounded-2xl text-white shadow-xl relative border-2 border-[#facc15] max-w-sm mx-auto flex gap-4 items-center">
-                           <div className="bg-white p-2 rounded-xl"><QRCodeCanvas value={portalUser.member_id} size={70} /></div>
-                           <div>
-                             <h2 className="text-xl font-black">TVK CADRE</h2>
-                             <p className="font-mono text-sm text-[#facc15]">{portalUser.member_id}</p>
-                             <p className="font-bold text-sm mt-2">{portalUser.full_name}</p>
-                           </div>
+                        <div className="bg-gradient-to-br from-[#8a1c1c] to-[#5a0c0c] p-6 rounded-2xl text-white shadow-xl relative border-2 border-[#facc15] max-w-sm mx-auto flex flex-col items-center text-center">
+                           <div className="bg-white p-2 rounded-xl mb-4"><QRCodeCanvas value={portalUser?.member_id || ''} size={90} /></div>
+                           <h2 className="text-2xl font-black">TVK CADRE</h2>
+                           <p className="font-mono text-sm text-[#facc15] mb-2">{portalUser?.member_id}</p>
+                           <p className="font-bold text-lg">{portalUser?.full_name}</p>
+                           <p className="text-xs text-red-200 mt-1">{portalUser?.zone}</p>
                         </div>
                       )}
 
@@ -384,7 +387,7 @@ const App = () => {
                             <p className="text-sm text-blue-800">State conference scheduled for next week in Villupuram. All Mandram Leaders are expected to attend.</p>
                           </div>
                           <div className="p-4 border border-gray-100 rounded-xl">
-                            <h4 className="font-bold mb-1">🏅 {t[lang].leaderboard}: {portalUser.zone}</h4>
+                            <h4 className="font-bold mb-1">🏅 {t[lang].leaderboard}: {portalUser?.zone}</h4>
                             <p className="text-sm text-gray-500 mb-2">Top recruiters in your area this month:</p>
                             <ol className="list-decimal pl-5 text-sm font-bold text-[#8a1c1c]">
                               <li>TVK-WHI-0012 (142 members)</li>
@@ -405,6 +408,7 @@ const App = () => {
                           <button type="submit" className="w-full bg-[#8a1c1c] text-white font-bold py-3 rounded-xl">{t[lang].submitIssue}</button>
                         </form>
                       )}
+
                     </div>
                   </div>
                 </div>
