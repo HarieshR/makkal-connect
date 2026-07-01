@@ -14,11 +14,13 @@ const Admin = () => {
   const [loginForm, setLoginForm] = useState({ role: 'Super Admin', zone: '', password: '' });
   const [authError, setAuthError] = useState('');
   
-  const [activeTab, setActiveTab] = useState('cadres'); // 'cadres', 'grievances', 'heatmap', 'broadcast'
+  const [activeTab, setActiveTab] = useState('cadres'); 
   const [citizens, setCitizens] = useState([]);
   const [grievances, setGrievances] = useState([]);
   const [loading, setLoading] = useState(true);
+  
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedZone, setSelectedZone] = useState('All');
 
   useEffect(() => {
     if (isAuthenticated) { fetchCitizens(); fetchGrievances(); }
@@ -28,15 +30,24 @@ const Admin = () => {
     e.preventDefault();
     if (loginForm.password === "admin") {
       if (loginForm.role === 'Zonal Admin' && !loginForm.zone) return setAuthError('Select your authorized zone.');
-      setIsAuthenticated(true); setAuthError('');
-    } else setAuthError('Access Denied: Unrecognized Credentials.');
+      
+      // Auto-lock the selected zone filter for Zonal Admins
+      if (loginForm.role === 'Zonal Admin') {
+        setSelectedZone(loginForm.zone);
+      } else {
+        setSelectedZone('All');
+      }
+
+      setIsAuthenticated(true); 
+      setAuthError('');
+    } else {
+      setAuthError('Access Denied: Unrecognized Credentials.');
+    }
   };
 
-  // --- 🔐 RBAC: DATA FETCHING ENFORCEMENT ---
   const fetchCitizens = async () => {
     setLoading(true);
     let query = supabase.from('citizens').select('*').order('created_at', { ascending: false });
-    // If Zonal Admin, restrict the database query itself
     if (loginForm.role === 'Zonal Admin') query = query.eq('zone', loginForm.zone);
     const { data } = await query;
     setCitizens(data || []);
@@ -61,9 +72,31 @@ const Admin = () => {
     setGrievances(grievances.map(g => g.id === id ? { ...g, status: newStatus } : g));
   };
 
-  const filteredCitizens = citizens.filter((p) => p.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || p.member_id?.toLowerCase().includes(searchTerm.toLowerCase()));
+  // --- RESTORED CSV EXPORT REPORT ---
+  const exportReport = () => {
+    const dataToExport = selectedZone === 'All' ? citizens : citizens.filter(c => c.zone === selectedZone);
+    
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + "Name,Member ID,Mobile Number,Constituency Area,Voter ID,Ration Card,Referral ID,Status\n"
+      + dataToExport.map(c => 
+          `${c.full_name},${c.member_id || 'N/A'},${c.phone_number},${c.zone},${c.voter_id},${c.family_card || 'N/A'},${c.referral_id || 'N/A'},${c.is_flagged ? 'Pending' : 'Cleared'}`
+        ).join("\n");
 
-  // --- 🗺️ HEATMAP CALCULATION LOGIC ---
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `TVK_Report_${selectedZone === 'All' ? 'All_Zones' : selectedZone}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const filteredCitizens = citizens.filter((p) => {
+    const matchesSearch = p.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || p.member_id?.toLowerCase().includes(searchTerm.toLowerCase()) || p.voter_id?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesZone = selectedZone === 'All' ? true : p.zone === selectedZone;
+    return matchesSearch && matchesZone;
+  });
+
   const getZoneCounts = () => {
     const counts = {};
     citizens.forEach(c => { counts[c.zone] = (counts[c.zone] || 0) + 1; });
@@ -115,31 +148,109 @@ const Admin = () => {
       </div>
 
       {activeTab === 'cadres' && (
-        <div className="bg-white rounded-[2rem] border shadow-sm p-4">
-          <div className="flex justify-end mb-4">
-            <input type="text" placeholder="Search ID or Name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="border p-2 rounded-lg text-sm w-64 outline-none focus:border-[#8a1c1c]" />
+        <div className="bg-white rounded-[2rem] border shadow-sm overflow-hidden p-6">
+          
+          {/* Filters & Export Row */}
+          <div className="flex flex-col sm:flex-row gap-3 w-full items-center mb-6 justify-between">
+            <div className="flex gap-3 w-full sm:w-auto">
+              <div className="relative w-full sm:w-auto">
+                <select 
+                  value={selectedZone} 
+                  onChange={(e) => setSelectedZone(e.target.value)} 
+                  disabled={loginForm.role === 'Zonal Admin'} 
+                  className="w-full sm:w-48 appearance-none bg-gray-50 border border-gray-200 text-slate-700 text-sm font-bold rounded-xl px-4 py-3 outline-none focus:border-[#8a1c1c] cursor-pointer shadow-inner disabled:opacity-70"
+                >
+                  {loginForm.role === 'Super Admin' && <option value="All">All Constituencies</option>}
+                  {loginForm.role === 'Zonal Admin' ? <option value={loginForm.zone}>{loginForm.zone}</option> : CONSTITUENCIES.map((zone, idx) => <option key={idx} value={zone}>{zone}</option>)}
+                </select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">▼</div>
+              </div>
+              
+              <button onClick={exportReport} className="w-full sm:w-auto px-6 py-3 bg-[#facc15] hover:bg-[#eab308] border border-[#ca8a04] rounded-xl text-sm font-black uppercase tracking-wider text-amber-950 shadow-md transition-colors flex items-center justify-center gap-2">
+                <span>📥</span> Generate Report
+              </button>
+            </div>
+
+            <div className="relative w-full sm:w-64">
+              <input type="text" placeholder="Search ID, Name, Voter..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50 shadow-inner focus:bg-white focus:border-[#8a1c1c] outline-none text-sm transition-all" />
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</div>
+            </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead><tr className="border-b text-slate-400 text-xs"><th className="pb-3 pl-2">Status</th><th className="pb-3">Cadre Details</th><th className="pb-3">Zone</th><th className="pb-3">Registered</th></tr></thead>
-              <tbody className="divide-y">
-                {filteredCitizens.map(p => (
-                  <tr key={p.id} className="hover:bg-gray-50">
-                    <td className="py-4 pl-2">
-                      <select value={p.is_flagged ? "Pending" : "Cleared"} onChange={(e) => updateStatus(p.id, e.target.value)} className={`text-xs font-bold rounded px-2 py-1 outline-none ${p.is_flagged?'bg-amber-100 text-amber-800':'bg-emerald-100 text-emerald-800'}`}>
-                        <option>Pending</option><option>Cleared</option>
-                      </select>
-                    </td>
-                    <td className="py-4">
-                      <div className="font-bold">{p.full_name}</div>
-                      <div className="text-xs font-mono text-slate-500">{p.member_id}</div>
-                    </td>
-                    <td className="py-4 text-xs font-bold text-slate-600">{p.zone}</td>
-                    <td className="py-4 text-xs text-slate-500">{new Date(p.created_at).toLocaleDateString()}</td>
+
+          {/* DETAILED CADRE TABLE */}
+          <div className="overflow-x-auto p-2">
+            {loading ? (
+              <div className="py-10 px-6 space-y-6">
+                {[1, 2, 3].map((i) => <div key={i} className="flex gap-8 animate-pulse items-center"><div className="h-10 bg-slate-100 rounded-lg w-full"></div></div>)}
+              </div>
+            ) : (
+              <table className="w-full text-left border-collapse min-w-[1000px]">
+                <thead>
+                  <tr>
+                    <th className="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100">Status</th>
+                    <th className="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100">Member</th>
+                    <th className="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100">Location</th>
+                    <th className="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100">Documents</th>
+                    <th className="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100 text-right">Referral & DOB</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {filteredCitizens.length === 0 ? (
+                    <tr><td colSpan="5" className="py-16 text-center text-slate-400 font-medium">No matching records found.</td></tr>
+                  ) : (
+                    filteredCitizens.map((person) => (
+                      <tr key={person.id} className={`${person.is_flagged ? 'bg-amber-50/30 hover:bg-amber-50' : 'hover:bg-slate-50/50'} transition-colors group cursor-default`}>
+                        
+                        <td className="px-6 py-5">
+                          <select 
+                            value={person.is_flagged ? "Pending" : "Cleared"}
+                            onChange={(e) => updateStatus(person.id, e.target.value)}
+                            className={`text-xs font-bold rounded-lg px-3 py-1.5 outline-none cursor-pointer border shadow-sm transition-colors ${
+                              person.is_flagged ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            }`}
+                          >
+                            <option value="Pending">Pending</option>
+                            <option value="Cleared">Cleared</option>
+                          </select>
+                        </td>
+
+                        <td className="px-6 py-5">
+                          <div className="flex items-center gap-4">
+                            {person.profile_pic_url ? (
+                              <img src={person.profile_pic_url} alt="Profile" className={`w-12 h-12 rounded-xl object-cover border-2 ${person.is_flagged ? 'border-amber-300' : 'border-emerald-200'}`} />
+                            ) : (
+                              <div className="w-12 h-12 rounded-xl bg-slate-100 border-2 border-slate-200 flex items-center justify-center text-slate-400 text-xs font-bold">N/A</div>
+                            )}
+                            <div>
+                              <div className={`font-bold text-base ${person.is_flagged ? 'text-amber-900' : 'text-slate-800'}`}>{person.full_name}</div>
+                              <div className="text-[10px] font-black tracking-widest text-slate-500 uppercase mt-0.5">{person.member_id}</div>
+                            </div>
+                          </div>
+                        </td>
+                        
+                        <td className="px-6 py-5">
+                          <div className="text-xs font-bold text-slate-700 bg-white border border-gray-200 shadow-sm px-2 py-1 rounded inline-flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>{person.zone}
+                          </div>
+                          <div className="text-xs text-slate-500 font-mono mt-1.5 font-bold">+91 {person.phone_number}</div>
+                        </td>
+                        
+                        <td className="px-6 py-5">
+                          <div className="font-mono text-xs font-bold text-slate-700 mb-1"><span className="text-slate-400 mr-1">VOTER:</span>{person.voter_id}</div>
+                          <div className="font-mono text-xs text-slate-500"><span className="text-slate-400 mr-1">RATION:</span>{person.family_card || '—'}</div>
+                        </td>
+
+                        <td className="px-6 py-5 text-right">
+                          <div className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">{person.referral_id || '—'}</div>
+                          <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">DOB: {person.dob ? new Date(person.dob).toLocaleDateString('en-GB') : '—'}</div>
+                        </td>
+                        
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       )}
@@ -153,7 +264,7 @@ const Admin = () => {
                 <span className="text-[10px] font-mono text-gray-400">{g.member_id} • {g.zone}</span>
               </div>
               <p className="text-sm font-medium mt-3 mb-2">{g.description}</p>
-              {g.lat && <a href={`https://maps.google.com/?q=${g.lat},${g.lng}`} target="_blank" className="text-xs text-blue-500 font-bold mb-4 block">📍 View Location</a>}
+              {g.lat && <a href={`https://maps.google.com/?q=${g.lat},${g.lng}`} target="_blank" rel="noreferrer" className="text-xs text-blue-500 font-bold mb-4 block">📍 View Location</a>}
               <div className="flex items-center gap-2 border-t pt-4">
                 <span className="text-xs font-bold text-gray-500">Action:</span>
                 <select value={g.status} onChange={(e) => updateGrievanceStatus(g.id, e.target.value)} className={`text-xs font-bold rounded px-2 py-1 outline-none ${g.status==='Open'?'bg-red-100 text-red-800':'bg-green-100 text-green-800'}`}>
@@ -171,7 +282,6 @@ const Admin = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {CONSTITUENCIES.map(zone => {
               const count = zoneCounts[zone] || 0;
-              // Calculate opacity based on max count (min 10% opacity for empty)
               const intensity = count === 0 ? 0.05 : Math.max(0.2, count / maxCount);
               return (
                 <div key={zone} className="p-4 rounded-xl border relative overflow-hidden flex flex-col justify-between h-24">

@@ -47,20 +47,16 @@ const App = () => {
   const [status, setStatus] = useState({ type: '', message: '', data: null });
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // OTP State
   const [showOtp, setShowOtp] = useState(false);
   const [otpInput, setOtpInput] = useState('');
 
-  // Portal State
   const [portalLogin, setPortalLogin] = useState({ memberId: '', phone: '' });
   const [portalUser, setPortalUser] = useState(null);
   const [portalData, setPortalData] = useState({ referrals: 0, badge: 'Thozhar' });
-  const [portalTab, setPortalTab] = useState('id'); // 'id', 'news', 'grievance'
+  const [portalTab, setPortalTab] = useState('id');
   
-  // Grievance State
   const [grievance, setGrievance] = useState({ category: 'Water Scarcity', description: '', lat: null, lng: null });
 
-  // Auto-fill Referral ID from URL URL?ref=TVK-XXX
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const refCode = urlParams.get('ref');
@@ -82,19 +78,15 @@ const App = () => {
     if (file) { setImageFile(file); setImagePreview(URL.createObjectURL(file)); }
   };
 
-  // --- 🎙️ VOICE ASSISTANT ---
   const startVoice = (field) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return alert("Voice typing not supported in this browser.");
     const recognition = new SpeechRecognition();
     recognition.lang = lang === 'ta' ? 'ta-IN' : 'en-IN';
     recognition.start();
-    recognition.onresult = (event) => {
-      setFormData(prev => ({ ...prev, [field]: event.results[0][0].transcript }));
-    };
+    recognition.onresult = (event) => setFormData(prev => ({ ...prev, [field]: event.results[0][0].transcript }));
   };
 
-  // --- 🔒 REGISTRATION & OTP ---
   const requestOtp = (e) => {
     e.preventDefault();
     if (!imageFile) return setStatus({ type: 'error', message: 'Profile photo is required.' });
@@ -103,7 +95,6 @@ const App = () => {
     setIsSubmitting(true);
     setStatus({ type: 'loading', message: 'Sending OTP to +91 ' + formData.phoneNumber });
     
-    // Simulate SMS Delay
     setTimeout(() => {
       setIsSubmitting(false);
       setShowOtp(true);
@@ -118,12 +109,10 @@ const App = () => {
     setIsSubmitting(true);
     setStatus({ type: 'loading', message: 'Securing data & generating ID...' });
 
-    // Generate Sequential ID
     const zonePrefix = formData.zone.substring(0, 3).toUpperCase();
     const { count } = await supabase.from('citizens').select('*', { count: 'exact', head: true }).eq('zone', formData.zone);
     const generatedMemberId = `TVK-${zonePrefix}-${String((count || 0) + 1).padStart(4, '0')}`;
 
-    // Force .jpg and public folder for RLS policy
     const fileName = `public/${generatedMemberId}-${Date.now()}.jpg`;
     
     const { error: uploadError } = await supabase.storage.from('profile_pics').upload(fileName, imageFile, { contentType: imageFile.type, upsert: false });
@@ -133,7 +122,7 @@ const App = () => {
 
     const newCitizen = {
       member_id: generatedMemberId, full_name: formData.fullName, dob: formData.dob, zone: formData.zone, 
-      voter_id: formData.voterId.toUpperCase(), family_card: formData.familyCard, // Now mandatory
+      voter_id: formData.voterId.toUpperCase(), family_card: formData.familyCard, 
       pan_number: formData.panNumber ? formData.panNumber.toUpperCase() : null, aadhaar_number: formData.aadhaarNumber || null, 
       phone_number: formData.phoneNumber, referral_id: formData.referralId ? formData.referralId.toUpperCase() : null,
       profile_pic_url: profilePicUrl, is_flagged: true
@@ -152,7 +141,6 @@ const App = () => {
     }
   };
 
-  // --- 👥 MEMBER PORTAL LOGIC ---
   const handlePortalLogin = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -194,10 +182,12 @@ const App = () => {
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
+  // The base URL for the QR verification link
+  const APP_URL = "https://tvk-makkal-connect.vercel.app/verify/";
+
   return (
     <div className="min-h-screen flex flex-col font-sans text-slate-800 bg-[#f8fafc]">
       
-      {/* Toast Notification */}
       {status.message && !status.data && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-5">
           <div className={`px-6 py-4 rounded-full shadow-2xl border text-white font-bold text-sm ${status.type === 'error' ? 'bg-red-500 border-red-400' : status.type === 'success' ? 'bg-emerald-500 border-emerald-400' : 'bg-amber-500 border-amber-400'}`}>
@@ -206,7 +196,6 @@ const App = () => {
         </div>
       )}
 
-      {/* Navigation */}
       <nav className="sticky top-0 z-40 bg-gradient-to-r from-[#5a0c0c] via-[#8a1c1c] to-[#5a0c0c] shadow-lg border-b border-[#a32a2a]">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
@@ -224,13 +213,10 @@ const App = () => {
         </div>
       </nav>
 
-      {/* Main Container */}
       <main className="flex-grow max-w-5xl mx-auto px-4 mt-8 mb-20 w-full">
         
-        {/* --- 1. ADMIN TAB --- */}
         {activeTab === 'admin' && <Admin />}
 
-        {/* --- 2. REGISTRATION TAB --- */}
         {activeTab === 'registration' && (
           <div className="max-w-4xl mx-auto animate-in fade-in">
             {status.data ? (
@@ -242,9 +228,9 @@ const App = () => {
                       <h2 className="text-2xl font-black mt-1">TVK CADRE</h2>
                       <p className="font-mono text-sm mt-2 bg-black/30 px-3 py-1 rounded inline-block">{status.data.member_id}</p>
                     </div>
-                    {/* QR Code Injection */}
+                    {/* VERIFIABLE QR CODE */}
                     <div className="bg-white p-2 rounded-xl shadow-inner">
-                      <QRCodeCanvas value={status.data.member_id} size={64} bgColor={"#ffffff"} fgColor={"#8a1c1c"} />
+                      <QRCodeCanvas value={`${APP_URL}${status.data.member_id}`} size={64} bgColor={"#ffffff"} fgColor={"#8a1c1c"} />
                     </div>
                   </div>
                   <div className="flex items-center gap-4 border-b border-white/20 pb-4 mb-4">
@@ -306,10 +292,7 @@ const App = () => {
                         </select>
                       </div>
                       <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].voter} *</label><input type="text" name="voterId" value={formData.voterId} onChange={handleChange} required className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c] uppercase" /></div>
-                      
-                      {/* Mandatory Family Card */}
                       <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].ration} *</label><input type="text" name="familyCard" value={formData.familyCard} onChange={handleChange} required className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c] uppercase" /></div>
-                      
                       <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].aadhaar}</label><input type="text" name="aadhaarNumber" value={formData.aadhaarNumber} onChange={handleChange} maxLength="12" className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c]" /></div>
                       <div className="flex flex-col"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].pan}</label><input type="text" name="panNumber" value={formData.panNumber} onChange={handleChange} maxLength="10" className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c] uppercase" /></div>
                       <div className="flex flex-col md:col-span-2"><label className="text-[11px] font-bold text-slate-400 uppercase mb-1">{t[lang].ref}</label><input type="text" name="referralId" value={formData.referralId} onChange={handleChange} className="border-b border-gray-300 py-2 outline-none focus:border-[#8a1c1c] uppercase" placeholder="TVK-..." /></div>
@@ -326,7 +309,6 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 3. MEMBER PORTAL TAB --- */}
         {activeTab === 'portal' && (
           <div className="max-w-4xl mx-auto animate-in fade-in">
             {!portalUser ? (
@@ -338,8 +320,6 @@ const App = () => {
               </form>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-                
-                {/* Gamification Sidebar */}
                 <div className="col-span-1 space-y-4">
                   <div className="bg-white p-6 rounded-3xl shadow-sm border text-center">
                     <img src={portalUser?.profile_pic_url} className="w-24 h-24 mx-auto rounded-full object-cover border-4 border-gray-100 mb-4" alt="profile"/>
@@ -359,7 +339,6 @@ const App = () => {
                   <button onClick={() => setPortalUser(null)} className="w-full bg-gray-100 text-slate-600 font-bold py-3 rounded-xl">Sign Out</button>
                 </div>
 
-                {/* Main Content */}
                 <div className="col-span-1 md:col-span-2">
                   <div className="bg-white rounded-3xl shadow-sm border overflow-hidden min-h-[400px]">
                     <div className="flex border-b overflow-x-auto">
@@ -369,10 +348,12 @@ const App = () => {
                     </div>
                     
                     <div className="p-8">
-                      
                       {portalTab === 'id' && (
                         <div className="bg-gradient-to-br from-[#8a1c1c] to-[#5a0c0c] p-6 rounded-2xl text-white shadow-xl relative border-2 border-[#facc15] max-w-sm mx-auto flex flex-col items-center text-center">
-                           <div className="bg-white p-2 rounded-xl mb-4"><QRCodeCanvas value={portalUser?.member_id || ''} size={90} /></div>
+                           <div className="bg-white p-2 rounded-xl mb-4">
+                             {/* VERIFIABLE QR CODE */}
+                             <QRCodeCanvas value={`${APP_URL}${portalUser?.member_id || ''}`} size={90} />
+                           </div>
                            <h2 className="text-2xl font-black">TVK CADRE</h2>
                            <p className="font-mono text-sm text-[#facc15] mb-2">{portalUser?.member_id}</p>
                            <p className="font-bold text-lg">{portalUser?.full_name}</p>
@@ -408,7 +389,6 @@ const App = () => {
                           <button type="submit" className="w-full bg-[#8a1c1c] text-white font-bold py-3 rounded-xl">{t[lang].submitIssue}</button>
                         </form>
                       )}
-
                     </div>
                   </div>
                 </div>
