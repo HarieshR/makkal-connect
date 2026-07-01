@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
+import { FixedSizeList as List } from 'react-window';
 
 const CONSTITUENCIES = [
   "Manadipet", "Thirubhuvanai", "Oussudu", "Mangalam", "Villianur", "Ozhukarai", "Kadirgamam", 
@@ -21,7 +22,6 @@ const Admin = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedZone, setSelectedZone] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
-
   const [replyInputs, setReplyInputs] = useState({});
 
   useEffect(() => { if (isAuthenticated) { fetchCitizens(); fetchGrievances(); } }, [isAuthenticated]);
@@ -59,7 +59,7 @@ const Admin = () => {
 
   const handleReplyGrievance = async (id) => {
     const replyText = replyInputs[id];
-    if(!replyText) return;
+    if(!replyText) return alert("Please type a reply first.");
     await supabase.from('grievances').update({ status: 'Resolved', reply: replyText }).eq('id', id);
     setGrievances(grievances.map(g => g.id === id ? { ...g, status: 'Resolved', reply: replyText } : g));
     alert("Response sent to user's portal successfully.");
@@ -90,15 +90,35 @@ const Admin = () => {
   const zoneCounts = getZoneCounts();
   const maxCount = Math.max(...Object.values(zoneCounts), 1);
 
+  // --- VIRTUAL DOM ROW FOR MOBILE ---
+  const VirtualRow = ({ index, style }) => {
+    const p = filteredCitizens[index];
+    return (
+      <div style={style} className="flex items-center border-b border-gray-100 hover:bg-slate-50 transition-colors px-4 py-2 min-w-[700px]">
+        <div className="w-[100px] flex-shrink-0">
+          <select value={p.is_flagged ? "Pending" : "Cleared"} onChange={(e) => updateStatus(p.id, e.target.value)} className={`text-[10px] font-bold rounded-lg px-2 py-1 outline-none border shadow-sm cursor-pointer ${p.is_flagged ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+            <option value="Pending">Pending</option><option value="Cleared">Cleared</option>
+          </select>
+        </div>
+        <div className="flex-1 flex items-center gap-3">
+          <img src={p.profile_pic_url} alt="pic" className="w-10 h-10 rounded-lg object-cover border" />
+          <div><div className="font-bold text-xs text-slate-800">{p.full_name}</div><div className="text-[9px] font-black tracking-widest text-slate-500 uppercase">{p.member_id}</div></div>
+        </div>
+        <div className="w-[120px] text-[11px] font-bold text-slate-700">{p.zone}</div>
+        <div className="w-[100px] text-[11px] font-mono text-slate-500">{p.voter_id}</div>
+      </div>
+    );
+  };
+
   if (!isAuthenticated) {
     return (
-      <div className="max-w-sm mx-auto mt-20">
-        <div className="bg-[#f8f9fa] rounded-2xl overflow-hidden shadow-2xl flex flex-col border border-gray-100">
-          <div className="bg-gradient-to-b from-[#241a1a] to-[#181212] p-10 flex flex-col items-center justify-center">
-            <div className="w-12 h-12 bg-[#dc2626] rounded-xl flex items-center justify-center mb-5"><span className="text-[#facc15] text-xl">🔒</span></div>
-            <h2 className="text-2xl font-black text-white tracking-[0.2em] uppercase">HQ Vault</h2>
+      <div className="max-w-sm mx-auto mt-16 px-4">
+        <div className="bg-[#f8f9fa] rounded-3xl overflow-hidden shadow-2xl flex flex-col border border-gray-100">
+          <div className="bg-gradient-to-b from-[#241a1a] to-[#181212] p-8 flex flex-col items-center justify-center">
+            <div className="w-10 h-10 bg-[#dc2626] rounded-xl flex items-center justify-center mb-4"><span className="text-[#facc15] text-lg">🔒</span></div>
+            <h2 className="text-xl font-black text-white tracking-[0.2em] uppercase">HQ Vault</h2>
           </div>
-          <form onSubmit={handleLogin} className="p-8 space-y-4">
+          <form onSubmit={handleLogin} className="p-6 space-y-4">
             <select value={loginForm.role} onChange={(e) => setLoginForm({...loginForm, role: e.target.value})} className="w-full bg-gray-100 p-3 rounded-xl font-bold text-sm outline-none">
               <option>Super Admin</option><option>Zonal Admin</option>
             </select>
@@ -107,8 +127,8 @@ const Admin = () => {
                 <option value="">Select Permitted Zone...</option>{CONSTITUENCIES.map(z => <option key={z} value={z}>{z}</option>)}
               </select>
             )}
-            <input type="password" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} required className="w-full bg-gray-100 border rounded-xl py-3 text-center tracking-[0.5em] font-black outline-none" placeholder="••••••••" />
-            <button type="submit" className="w-full bg-black text-white font-bold py-4 rounded-xl uppercase text-xs">Authenticate</button>
+            <input type="password" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} required className="w-full bg-gray-100 border rounded-xl py-3 text-center tracking-[0.5em] font-black outline-none text-sm" placeholder="••••••••" />
+            <button type="submit" className="w-full bg-black text-white font-bold py-3.5 rounded-xl uppercase text-xs hover:bg-gray-900 transition-colors">Authenticate</button>
           </form>
         </div>
       </div>
@@ -116,117 +136,96 @@ const Admin = () => {
   }
 
   return (
-    <div className="space-y-6">
-      
-      {/* Top Nav */}
-      <div className="bg-white p-4 rounded-2xl border flex flex-col sm:flex-row justify-between items-center gap-4">
-        <h2 className="font-bold text-lg flex items-center gap-2">{loginForm.role} Panel {loginForm.role === 'Zonal Admin' && <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">{loginForm.zone}</span>}</h2>
-        <div className="flex gap-2 bg-gray-100 p-1 rounded-lg overflow-x-auto">
-          <button onClick={()=>setActiveTab('cadres')} className={`px-4 py-2 text-xs font-bold rounded-md whitespace-nowrap ${activeTab==='cadres'?'bg-white shadow':'text-gray-500'}`}>Cadres</button>
-          <button onClick={()=>setActiveTab('grievances')} className={`px-4 py-2 text-xs font-bold rounded-md whitespace-nowrap ${activeTab==='grievances'?'bg-white shadow':'text-gray-500'}`}>Grievances</button>
-          {loginForm.role === 'Super Admin' && <button onClick={()=>setActiveTab('heatmap')} className={`px-4 py-2 text-xs font-bold rounded-md whitespace-nowrap ${activeTab==='heatmap'?'bg-white shadow':'text-gray-500'}`}>Heatmap</button>}
-          <button onClick={()=>setActiveTab('broadcast')} className={`px-4 py-2 text-xs font-bold rounded-md whitespace-nowrap ${activeTab==='broadcast'?'bg-white shadow':'text-gray-500'}`}>Broadcast</button>
+    <div className="space-y-4">
+      {/* Top Nav (Mobile Scrollable) */}
+      <div className="bg-white p-4 rounded-3xl border flex flex-col sm:flex-row justify-between items-center gap-4">
+        <h2 className="font-bold text-base flex items-center gap-2">{loginForm.role} {loginForm.role === 'Zonal Admin' && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-1 rounded-full">{loginForm.zone}</span>}</h2>
+        <div className="flex gap-1.5 bg-gray-50 p-1.5 rounded-xl w-full sm:w-auto overflow-x-auto hide-scrollbar">
+          <button onClick={()=>setActiveTab('cadres')} className={`flex-1 sm:flex-none px-4 py-2 text-[11px] font-bold rounded-lg whitespace-nowrap transition-colors ${activeTab==='cadres'?'bg-white shadow text-[#8a1c1c]':'text-gray-500'}`}>Cadres</button>
+          <button onClick={()=>setActiveTab('grievances')} className={`flex-1 sm:flex-none px-4 py-2 text-[11px] font-bold rounded-lg whitespace-nowrap transition-colors ${activeTab==='grievances'?'bg-white shadow text-[#8a1c1c]':'text-gray-500'}`}>Grievances</button>
+          {loginForm.role === 'Super Admin' && <button onClick={()=>setActiveTab('heatmap')} className={`flex-1 sm:flex-none px-4 py-2 text-[11px] font-bold rounded-lg whitespace-nowrap transition-colors ${activeTab==='heatmap'?'bg-white shadow text-[#8a1c1c]':'text-gray-500'}`}>Heatmap</button>}
+          <button onClick={()=>setActiveTab('broadcast')} className={`flex-1 sm:flex-none px-4 py-2 text-[11px] font-bold rounded-lg whitespace-nowrap transition-colors ${activeTab==='broadcast'?'bg-white shadow text-[#8a1c1c]':'text-gray-500'}`}>Broadcast</button>
         </div>
       </div>
 
-      {/* Cadres Dashboard */}
       {activeTab === 'cadres' && (
-        <div className="bg-white rounded-[2rem] border shadow-sm overflow-hidden p-6">
-          <div className="flex flex-col sm:flex-row gap-3 w-full items-center mb-6 justify-between">
-            <div className="flex gap-3 w-full sm:w-auto">
-              <select value={selectedZone} onChange={(e) => setSelectedZone(e.target.value)} disabled={loginForm.role === 'Zonal Admin'} className="w-full sm:w-40 bg-gray-50 border border-gray-200 text-slate-700 text-sm font-bold rounded-xl px-4 py-2 outline-none cursor-pointer disabled:opacity-70">
-                {loginForm.role === 'Super Admin' && <option value="All">All Zones</option>}
-                {loginForm.role === 'Zonal Admin' ? <option value={loginForm.zone}>{loginForm.zone}</option> : CONSTITUENCIES.map((z, i) => <option key={i} value={z}>{z}</option>)}
-              </select>
-              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="w-full sm:w-32 bg-gray-50 border border-gray-200 text-slate-700 text-sm font-bold rounded-xl px-4 py-2 outline-none cursor-pointer">
-                <option value="All">All Status</option><option value="Pending">Pending Only</option><option value="Cleared">Cleared Only</option>
-              </select>
-              <button onClick={exportReport} className="px-6 py-2 bg-[#facc15] hover:bg-[#eab308] border border-[#ca8a04] rounded-xl text-sm font-black uppercase tracking-wider text-amber-950 shadow-md">📥 CSV</button>
+        <div className="bg-white rounded-3xl border shadow-sm overflow-hidden p-4 md:p-6">
+          
+          <div className="flex flex-col md:flex-row gap-3 w-full items-center mb-5 justify-between">
+            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+              <div className="flex gap-2">
+                <select value={selectedZone} onChange={(e) => setSelectedZone(e.target.value)} disabled={loginForm.role === 'Zonal Admin'} className="flex-1 sm:w-36 bg-gray-50 border border-gray-200 text-slate-700 text-[11px] font-bold rounded-xl px-3 py-2 outline-none disabled:opacity-70">
+                  {loginForm.role === 'Super Admin' && <option value="All">All Zones</option>}
+                  {loginForm.role === 'Zonal Admin' ? <option value={loginForm.zone}>{loginForm.zone}</option> : CONSTITUENCIES.map((z, i) => <option key={i} value={z}>{z}</option>)}
+                </select>
+                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="flex-1 sm:w-32 bg-gray-50 border border-gray-200 text-slate-700 text-[11px] font-bold rounded-xl px-3 py-2 outline-none">
+                  <option value="All">All Status</option><option value="Pending">Pending</option><option value="Cleared">Cleared</option>
+                </select>
+              </div>
+              <button onClick={exportReport} className="w-full sm:w-auto px-5 py-2 bg-[#facc15] hover:bg-[#eab308] border border-[#ca8a04] rounded-xl text-[10px] font-black uppercase tracking-wider text-amber-950 shadow-sm">📥 CSV</button>
             </div>
-            <input type="text" placeholder="Search ID or Name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full sm:w-64 pl-4 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 shadow-inner focus:bg-white outline-none text-sm" />
+            <input type="text" placeholder="Search ID or Name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-56 px-4 py-2 rounded-xl border border-gray-200 bg-gray-50 shadow-inner focus:bg-white outline-none text-xs" />
           </div>
 
-          <div className="flex text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-200 px-4 pb-3">
-             <div className="w-[120px]">Status</div><div className="flex-1">Member Profile</div><div className="w-[150px]">Zone</div><div className="w-[120px]">Voter ID</div>
-          </div>
-          
-          <div className="border border-gray-100 rounded-b-xl overflow-hidden">
-            {loading ? <p className="p-8 text-center text-gray-400">Loading Database...</p> : (
-              <>
-                <div className="max-h-[600px] overflow-y-auto">
-                  {/* CRASH FIX: Standard DOM Rendering with 100 Item Limit */}
-                  {filteredCitizens.slice(0, 100).map((p) => (
-                    <div key={p.id} className="flex items-center border-b border-gray-50 hover:bg-slate-50 transition-colors px-4 py-2">
-                      <div className="w-[120px] flex-shrink-0">
-                        <select value={p.is_flagged ? "Pending" : "Cleared"} onChange={(e) => updateStatus(p.id, e.target.value)} className={`text-[10px] font-bold rounded-lg px-2 py-1 outline-none border shadow-sm ${p.is_flagged ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
-                          <option value="Pending">Pending</option><option value="Cleared">Cleared</option>
-                        </select>
-                      </div>
-                      <div className="flex-1 flex items-center gap-4">
-                        <img src={p.profile_pic_url} alt="pic" className="w-10 h-10 rounded-lg object-cover border" />
-                        <div><div className="font-bold text-sm text-slate-800">{p.full_name}</div><div className="text-[10px] font-black tracking-widest text-slate-500 uppercase">{p.member_id}</div></div>
-                      </div>
-                      <div className="w-[150px] text-xs font-bold text-slate-700">{p.zone}</div>
-                      <div className="w-[120px] text-xs font-mono text-slate-500">{p.voter_id}</div>
-                    </div>
-                  ))}
-                </div>
-                {/* Visual Indicator for Truncated Data */}
-                {filteredCitizens.length > 100 && (
-                  <div className="p-3 text-center text-xs font-bold text-slate-400 bg-gray-50 border-t">
-                    Showing top 100 of {filteredCitizens.length} results. Use the search bar to find specific cadres.
+          <div className="w-full overflow-x-auto hide-scrollbar border border-gray-100 rounded-2xl">
+            <div className="flex text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-200 px-4 py-3 bg-gray-50 min-w-[700px]">
+               <div className="w-[100px]">Status</div><div className="flex-1">Member Profile</div><div className="w-[120px]">Zone</div><div className="w-[100px]">Voter ID</div>
+            </div>
+            
+            <div className="min-w-[700px]">
+              {loading ? <p className="p-8 text-center text-xs text-gray-400">Loading Database...</p> : (
+                <>
+                  <div className="max-h-[500px] overflow-y-auto">
+                    <List height={500} itemCount={filteredCitizens.length} itemSize={65} width={"100%"}>
+                      {VirtualRow}
+                    </List>
                   </div>
-                )}
-                {filteredCitizens.length === 0 && (
-                  <div className="p-8 text-center text-sm font-bold text-slate-400">No records found.</div>
-                )}
-              </>
-            )}
+                  {filteredCitizens.length === 0 && <div className="p-8 text-center text-xs font-bold text-slate-400">No records found.</div>}
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Grievances Tab */}
       {activeTab === 'grievances' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {grievances.length === 0 ? <p className="text-slate-400">No grievances reported.</p> : grievances.map(g => (
-            <div key={g.id} className="bg-white p-6 rounded-2xl border shadow-sm">
+          {grievances.length === 0 ? <p className="text-slate-400 text-sm p-4">No grievances reported.</p> : grievances.map(g => (
+            <div key={g.id} className="bg-white p-5 rounded-3xl border shadow-sm">
               <div className="flex justify-between items-start mb-2">
-                <span className="bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-1 rounded uppercase">{g.department}</span>
-                <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase ${g.status==='Open'?'bg-red-100 text-red-800':'bg-green-100 text-green-800'}`}>{g.status}</span>
+                <span className="bg-indigo-100 text-indigo-800 text-[9px] font-bold px-2 py-0.5 rounded uppercase">{g.department}</span>
+                <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${g.status==='Open'?'bg-red-100 text-red-800':'bg-green-100 text-green-800'}`}>{g.status}</span>
               </div>
-              <p className="text-xs text-gray-400 font-mono mb-2">{g.member_id} • {g.zone}</p>
-              <p className="text-sm font-medium mt-1 mb-4">{g.description}</p>
+              <p className="text-[10px] text-gray-400 font-mono mb-2">{g.member_id} • {g.zone}</p>
+              <p className="text-xs font-medium mt-1 mb-3">{g.description}</p>
               
-              {/* FIXED GOOGLE MAPS GPS LINK */}
-              {g.lat && <a href={`https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`} target="_blank" rel="noreferrer" className="text-xs text-blue-500 font-bold mb-4 block hover:underline">📍 View GPS Location</a>}
+              {g.lat && <a href={`https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`} target="_blank" rel="noreferrer" className="text-[10px] text-blue-500 font-bold mb-3 block hover:underline">📍 View GPS Location</a>}
               
               {g.status === 'Open' ? (
-                <div className="border-t pt-4 flex gap-2">
-                  <input type="text" placeholder="Type resolution reply..." value={replyInputs[g.id] || ''} onChange={(e)=>setReplyInputs({...replyInputs, [g.id]: e.target.value})} className="flex-1 border rounded-lg px-3 py-2 text-sm outline-none" />
-                  <button onClick={() => handleReplyGrievance(g.id)} className="bg-green-600 text-white font-bold text-xs px-4 rounded-lg hover:bg-green-700">Resolve</button>
+                <div className="border-t pt-3 flex flex-col sm:flex-row gap-2">
+                  <input type="text" placeholder="Type resolution reply..." value={replyInputs[g.id] || ''} onChange={(e)=>setReplyInputs({...replyInputs, [g.id]: e.target.value})} className="flex-1 border rounded-xl px-3 py-2 text-xs outline-none focus:border-[#8a1c1c]" />
+                  <button onClick={() => handleReplyGrievance(g.id)} className="w-full sm:w-auto bg-green-600 text-white font-bold text-xs py-2 px-4 rounded-xl hover:bg-green-700">Resolve</button>
                 </div>
               ) : (
-                <div className="bg-gray-50 border rounded-lg p-3 mt-2"><p className="text-[10px] font-bold text-gray-400 uppercase mb-1">HQ Reply</p><p className="text-sm font-medium text-gray-800">{g.reply}</p></div>
+                <div className="bg-gray-50 border rounded-xl p-3 mt-2"><p className="text-[9px] font-bold text-gray-400 uppercase mb-1">HQ Reply</p><p className="text-xs font-medium text-gray-800">{g.reply}</p></div>
               )}
             </div>
           ))}
         </div>
       )}
 
-      {/* Heatmap Tab */}
       {activeTab === 'heatmap' && (
-        <div className="bg-white p-8 rounded-[2rem] border shadow-sm">
-          <h2 className="text-xl font-bold mb-6">Zone Registration Heatmap</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white p-6 md:p-8 rounded-3xl border shadow-sm">
+          <h2 className="text-lg font-bold mb-5">Zone Registration Heatmap</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {CONSTITUENCIES.map(zone => {
               const count = zoneCounts[zone] || 0;
               const intensity = count === 0 ? 0.05 : Math.max(0.2, count / maxCount);
               return (
-                <div key={zone} className="p-4 rounded-xl border relative overflow-hidden flex flex-col justify-between h-24">
+                <div key={zone} className="p-3 rounded-2xl border relative overflow-hidden flex flex-col justify-between h-20">
                   <div className="absolute inset-0 bg-[#8a1c1c] transition-all" style={{ opacity: intensity }}></div>
-                  <h3 className="relative z-10 text-xs font-bold text-slate-800 mix-blend-multiply">{zone}</h3>
-                  <p className="relative z-10 text-xl font-black text-slate-900 mix-blend-multiply">{count}</p>
+                  <h3 className="relative z-10 text-[10px] font-bold text-slate-800 mix-blend-multiply leading-tight">{zone}</h3>
+                  <p className="relative z-10 text-lg font-black text-slate-900 mix-blend-multiply">{count}</p>
                 </div>
               );
             })}
@@ -234,13 +233,12 @@ const Admin = () => {
         </div>
       )}
 
-      {/* Broadcast Tab */}
       {activeTab === 'broadcast' && (
-        <div className="bg-white p-8 rounded-[2rem] border shadow-sm max-w-xl mx-auto text-center">
-          <div className="text-5xl mb-4">💬</div><h2 className="text-xl font-bold mb-2">WhatsApp Bulk Broadcast</h2>
-          <p className="text-sm text-gray-500 mb-6">Send an official HQ update to all Cleared cadres.</p>
-          <textarea rows="4" className="w-full border rounded-xl p-4 bg-gray-50 outline-none focus:border-[#8a1c1c] mb-4 text-sm" placeholder="Type your message in Tamil or English..."></textarea>
-          <button onClick={() => alert("Message queued for WhatsApp API delivery via Twilio.")} className="w-full bg-[#8a1c1c] hover:bg-[#6b1515] text-white font-bold py-3 rounded-xl shadow-md">Send Broadcast</button>
+        <div className="bg-white p-6 md:p-8 rounded-3xl border shadow-sm max-w-lg mx-auto text-center">
+          <div className="text-4xl mb-3">💬</div><h2 className="text-lg font-bold mb-1">WhatsApp Bulk Broadcast</h2>
+          <p className="text-xs text-gray-500 mb-5">Send an official HQ update to all Cleared cadres.</p>
+          <textarea rows="4" className="w-full border rounded-2xl p-4 bg-gray-50 outline-none focus:border-[#8a1c1c] mb-4 text-xs" placeholder="Type your message in Tamil or English..."></textarea>
+          <button onClick={() => alert("Message queued for WhatsApp API delivery via Twilio.")} className="w-full bg-[#8a1c1c] hover:bg-[#6b1515] text-white font-bold py-3.5 rounded-xl shadow-md transition-colors text-sm">Send Broadcast</button>
         </div>
       )}
     </div>
